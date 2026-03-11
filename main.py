@@ -35,6 +35,7 @@ from backend.group_scanner import scanner, Group
 from backend.inactivity_filter import create_inactivity_filter, InactivityFilter
 from backend.message_sender import sender, AutomationConfig, SendStatus
 from backend.scheduler import scheduler, Schedule, ScheduleType
+from backend.scheduler.rules_engine import rules_engine, AutomationRule
 
 # Create Flask app
 app = Flask(__name__, 
@@ -437,36 +438,40 @@ def get_statistics():
 
 @app.route('/api/automation/send', methods=['POST'])
 def send_messages():
-    """Send messages to inactive groups"""
+    """Send messages (Broadcast)"""
     if not client_manager.is_authenticated:
         return jsonify({'error': 'Not authenticated'}), 401
     
     if app_state.is_sending:
         return jsonify({'error': 'Sending already in progress'}), 400
     
-    if not app_state.inactive_groups:
-        return jsonify({'error': 'No inactive groups to send to'}), 400
-    
     data = request.get_json() or {}
-    message_template = data.get('message', 'Hello! This group seems inactive. Just checking in!')
-    delay_min = int(data.get('delay_min', 10))
-    delay_max = int(data.get('delay_max', 30))
-    max_messages = int(data.get('max_messages', 50))
-    dry_run = data.get('dry_run', False)
+    message_template = data.get('message', '')
+    target = data.get('target', 'all')  # "all" or "inactive"
+    
+    if target == 'inactive':
+        # Temporary logic: send to any group inactive > 30 days if not previously processed by filter
+        # Better: apply a 30 day default filter if needed
+        groups_to_send = app_state.inactive_groups if app_state.inactive_groups else app_state.groups
+    else:
+        groups_to_send = app_state.groups
+        
+    if not groups_to_send:
+        return jsonify({'error': 'No groups to send to (try scanning first)'}), 400
     
     if not message_template.strip():
-        return jsonify({'error': 'Message template required'}), 400
-    
+        return jsonify({'error': 'Message required'}), 400
+
     config_obj = AutomationConfig(
         message_template=message_template,
-        delay_min=delay_min,
-        delay_max=delay_max,
-        max_messages=max_messages,
-        dry_run=dry_run
+        delay_min=10,
+        delay_max=30,
+        max_messages=1000,
+        dry_run=False
     )
     
     app_state.is_sending = True
-    app_state.add_log(f"Starting message automation (dry_run={dry_run})...")
+    app_state.add_log(f"Starting broadcast to {target} groups...")
     
     if dry_run:
         app_state.add_log("DRY RUN MODE - No messages will be sent")
@@ -520,6 +525,47 @@ def automation_status():
         'results': sender.get_results_summary()
     })
 
+# ==================== Rules Engine API ====================
+
+@app.route('/api/rules', methods=['GET'])
+def get_rules():
+    """Get all automation rules"""
+    return jsonify({
+        'rules': [r.to_dict() for r in rules_engine.get_rules()]
+    })
+
+@app.route('/api/rules', methods=['POST'])
+def add_rule():
+    """Add a new automation rule"""
+    data = request.get_json()
+    try:
+        rule = AutomationRule.from_dict(data)
+        rules_engine.add_rule(rule)
+        app_state.add_log(f"Added new automation rule for {rule.period_value} {rule.period_unit}")
+        return jsonify({'success': True, 'rule': rule.to_dict()})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/api/rules/<rule_id>', methods=['DELETE'])
+def delete_rule(rule_id):
+    """Delete an automation rule"""
+    success = rules_engine.delete_rule(rule_id)
+    if success:
+        app_state.add_log(f"Deleted rule {rule_id}")
+        return jsonify({'success': True})
+    return jsonify({'error': 'Rule not found'}), 404
+
+@app.route('/api/rules/<rule_id>/toggle', methods=['POST'])
+def toggle_rule(rule_id):
+    """Toggle a rule on or off"""
+    data = request.get_json()
+    is_active = data.get('is_active', True)
+    rule = rules_engine.toggle_rule(rule_id, is_active)
+    if rule:
+        status = "enabled" if is_active else "disabled"
+        app_state.add_log(f"Rule {rule_id} {status}")
+        return jsonify({'success': True, 'rule': rule.to_dict()})
+    return jsonify({'error': 'Rule not found'}), 404
 
 # ==================== Dashboard API ====================
 

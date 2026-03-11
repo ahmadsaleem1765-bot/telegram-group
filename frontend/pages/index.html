@@ -225,75 +225,73 @@
             </section>
 
             <!-- Automation View -->
+            <!-- Automation View (New Overhaul) -->
             <section class="view" id="automationView">
                 <header class="view-header">
                     <h1>Automation</h1>
-                    <p class="view-subtitle">Configure and run automated messaging</p>
+                    <p class="view-subtitle">Broadcast or setup inactivity rules</p>
                 </header>
 
-                <div class="automation-grid">
-                    <!-- Inactivity Configuration -->
-                    <div class="card">
-                        <h2 class="card-title">
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/>
-                                <path d="M10 6V10M10 14H10.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                            </svg>
-                            Inactivity Configuration
-                        </h2>
-                        <div class="form-group">
-                            <label>Select Date</label>
-                            <input type="date" id="thresholdDate" class="input">
-                        </div>
-                        <div class="form-group">
-                            <label>Select Time</label>
-                            <input type="time" id="thresholdTime" class="input" value="00:00">
-                        </div>
-                        <button class="btn btn-secondary" id="applyThresholdBtn">Apply Threshold</button>
-                        <p class="help-text">Groups with last message before this date/time will be marked as inactive.</p>
-                    </div>
-
-                    <!-- Message Configuration -->
-                    <div class="card">
-                        <h2 class="card-title">
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                <path d="M4 4H16V14H6L4 16V4Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-                            </svg>
-                            Message Template
-                        </h2>
-                        <div class="form-group">
-                            <label>Message</label>
-                            <textarea id="messageTemplate" class="input textarea" rows="4" placeholder="Hello everyone! This group has been inactive for a while. Just checking in!"></textarea>
-                        </div>
-                        <!-- Hidden advanced settings to keep UI clean -->
-                        <input type="hidden" id="delayMin" value="10">
-                        <input type="hidden" id="delayMax" value="30">
-                        <input type="hidden" id="maxMessages" value="50">
-                        <input type="checkbox" id="dryRun" style="display: none;">
-                    </div>
-
-                    <!-- Actions -->
+                <div class="automation-grid" style="display: flex; flex-direction: column; gap: 20px;">
+                    
+                    <!-- New Broadcast -->
                     <div class="card full-width">
-                        <h2 class="card-title">
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                <path d="M4 10H16M16 10L11 5M16 10L11 15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                            Send Messages
+                        <h2 class="card-title" style="margin-bottom: 20px; font-size: 1.25rem;">
+                            New Broadcast
                         </h2>
-                        <div class="inactive-summary">
-                            <span class="inactive-count" id="inactiveCount">0</span>
-                            <span>inactive groups ready to message</span>
+                        
+                        <div class="form-group">
+                            <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;">TO:</label>
+                            <select id="broadcastTarget" class="input" style="width: 100%; padding: 12px; background: #1f1f22; border: 1px solid #333; border-radius: 8px; color: #fff; margin-top: 8px;">
+                                <option value="all">All Groups</option>
+                                <option value="inactive">Inactive Groups (>30 Days)</option>
+                            </select>
                         </div>
-                        <div class="button-group">
-                            <button class="btn btn-primary btn-large" id="sendMessagesBtn" disabled>
-                                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                    <path d="M4 10H16M16 10L11 5M16 10L11 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                </svg>
-                                Start Automation
+                        
+                        <div class="form-group" style="margin-top: 15px;">
+                            <textarea id="broadcastMessage" class="input textarea" rows="4" placeholder="Type your message..." style="width: 100%; background: #1f1f22; border: 1px solid #333; border-radius: 8px; color: #fff; padding: 12px;"></textarea>
+                        </div>
+
+                        <button class="btn btn-primary btn-large" id="sendBroadcastBtn" style="width: 100%; margin-top: 10px; background: #007bff; border-radius: 8px;">
+                            Send
+                        </button>
+                    </div>
+
+                    <!-- Automated Inactive Group Messaging -->
+                    <div class="card full-width">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <h2 class="card-title" style="margin: 0; font-size: 1.25rem;">Automated Inactive Group Messaging</h2>
+                            <button id="addRuleBtn" style="background: transparent; border: none; font-size: 1.5rem; color: #007bff; cursor: pointer;">+</button>
+                        </div>
+
+                        <!-- Add Rule Form (Hidden by default) -->
+                        <div id="addRuleForm" style="display: none; border-top: 1px solid #333; padding-top: 20px; margin-bottom: 20px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;">INACTIVITY PERIOD</label>
+                                <button id="cancelRuleBtn" style="background: transparent; border: 1px solid #555; color: #fff; cursor: pointer; border-radius: 4px; padding: 4px 8px;">X</button>
+                            </div>
+                            
+                            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                                <input type="number" id="rulePeriodValue" class="input" value="30" min="1" style="flex: 1; background: #1f1f22; border: 1px solid #333; border-radius: 8px; color: #fff; padding: 12px;">
+                                <select id="rulePeriodUnit" class="input" style="flex: 1; background: #1f1f22; border: 1px solid #333; border-radius: 8px; color: #fff; padding: 12px;">
+                                    <option value="Days">Days</option>
+                                    <option value="Hours">Hours</option>
+                                    <option value="Minutes">Minutes</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <textarea id="ruleMessage" class="input textarea" rows="4" placeholder="Automated message..." style="width: 100%; background: #1f1f22; border: 1px solid #333; border-radius: 8px; color: #fff; padding: 12px;"></textarea>
+                            </div>
+
+                            <button class="btn btn-primary btn-large" id="saveRuleBtn" style="width: 100%; margin-top: 10px; background: #007bff; border-radius: 8px;">
+                                Save Rule
                             </button>
-                            <button class="btn btn-danger" id="stopAutomationBtn" style="display: none;">
-                                Stop
-                            </button>
+                        </div>
+
+                        <!-- Active Rules List -->
+                        <div id="rulesList" style="color: #ccc;">
+                            No active rules
                         </div>
                     </div>
 

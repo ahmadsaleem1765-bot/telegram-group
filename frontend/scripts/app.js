@@ -40,22 +40,24 @@ const elements = {
     groupsTableBody: document.getElementById('groupsTableBody'),
     
     // Automation
-    thresholdDate: document.getElementById('thresholdDate'),
-    thresholdTime: document.getElementById('thresholdTime'),
-    applyThresholdBtn: document.getElementById('applyThresholdBtn'),
-    messageTemplate: document.getElementById('messageTemplate'),
-    delayMin: document.getElementById('delayMin'),
-    delayMax: document.getElementById('delayMax'),
-    maxMessages: document.getElementById('maxMessages'),
-    dryRun: document.getElementById('dryRun'),
-    sendMessagesBtn: document.getElementById('sendMessagesBtn'),
-    stopAutomationBtn: document.getElementById('stopAutomationBtn'),
-    inactiveCount: document.getElementById('inactiveCount'),
+    broadcastTarget: document.getElementById('broadcastTarget'),
+    broadcastMessage: document.getElementById('broadcastMessage'),
+    sendBroadcastBtn: document.getElementById('sendBroadcastBtn'),
+    
+    // Rules
+    addRuleBtn: document.getElementById('addRuleBtn'),
+    addRuleForm: document.getElementById('addRuleForm'),
+    cancelRuleBtn: document.getElementById('cancelRuleBtn'),
+    saveRuleBtn: document.getElementById('saveRuleBtn'),
+    rulePeriodValue: document.getElementById('rulePeriodValue'),
+    rulePeriodUnit: document.getElementById('rulePeriodUnit'),
+    ruleMessage: document.getElementById('ruleMessage'),
+    rulesList: document.getElementById('rulesList'),
+    
+    // Progress
     progressCard: document.getElementById('progressCard'),
     progressFill: document.getElementById('progressFill'),
     progressText: document.getElementById('progressText'),
-    
-    // Logs
     logsList: document.getElementById('logsList'),
     refreshLogsBtn: document.getElementById('refreshLogsBtn'),
     clearLogsBtn: document.getElementById('clearLogsBtn'),
@@ -495,33 +497,23 @@ async function applyThreshold() {
     }
 }
 
-// ==================== Message Automation ====================
-async function sendMessages() {
-    if (state.isSending || state.inactiveGroups.length === 0) return;
+// ==================== Message Automation & Rules ====================
+async function sendBroadcast() {
+    if (state.isSending) return;
     
-    const message = elements.messageTemplate.value.trim();
+    const target = elements.broadcastTarget.value;
+    const message = elements.broadcastMessage.value.trim();
     if (!message) {
         showToast('Please enter a message', 'error');
         return;
     }
     
-    const config = {
-        message,
-        delay_min: parseInt(elements.delayMin.value) || 10,
-        delay_max: parseInt(elements.delayMax.value) || 30,
-        max_messages: parseInt(elements.maxMessages.value) || 50,
-        dry_run: elements.dryRun.checked
-    };
+    const config = { target, message };
     
     try {
         state.isSending = true;
-        elements.sendMessagesBtn.disabled = true;
-        elements.stopAutomationBtn.style.display = 'inline-flex';
+        elements.sendBroadcastBtn.disabled = true;
         elements.progressCard.style.display = 'block';
-        
-        if (config.dry_run) {
-            showToast('Starting preview mode (no messages will be sent)', 'info');
-        }
         
         const response = await fetch('/api/automation/send', {
             method: 'POST',
@@ -533,30 +525,105 @@ async function sendMessages() {
         
         if (response.ok) {
             const summary = data.summary;
-            showToast(`Sent ${summary.sent} messages, ${summary.failed} failed`, 
-                summary.failed > 0 ? 'warning' : 'success');
-            
-            // Update progress to complete
+            showToast(`Sent ${summary.sent} messages, ${summary.failed} failed`, summary.failed > 0 ? 'warning' : 'success');
             elements.progressFill.style.width = '100%';
             elements.progressText.textContent = `${summary.sent} / ${summary.total} sent`;
+            elements.broadcastMessage.value = ''; // clear
         } else {
-            showToast(data.error || 'Automation failed', 'error');
+            showToast(data.error || 'Broadcast failed', 'error');
         }
     } catch (error) {
-        showToast('Automation error: ' + error.message, 'error');
+        showToast('Broadcast error: ' + error.message, 'error');
     } finally {
         state.isSending = false;
-        elements.sendMessagesBtn.disabled = false;
-        elements.stopAutomationBtn.style.display = 'none';
+        elements.sendBroadcastBtn.disabled = false;
     }
 }
 
-async function stopAutomation() {
+async function loadRules() {
     try {
-        await fetch('/api/automation/stop', { method: 'POST' });
-        showToast('Automation stopped', 'info');
+        const response = await fetch('/api/rules');
+        const data = await response.json();
+        renderRules(data.rules || []);
     } catch (error) {
-        console.error('Failed to stop automation:', error);
+        console.error('Failed to load rules:', error);
+    }
+}
+
+function renderRules(rules) {
+    if (!rules || rules.length === 0) {
+        elements.rulesList.innerHTML = '<div style="color: #94a3b8; font-style: italic;">No active rules</div>';
+        return;
+    }
+    
+    elements.rulesList.innerHTML = rules.map(rule => `
+        <div style="background: rgba(255,255,255,0.05); border: 1px solid #333; border-radius: 8px; padding: 15px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: start;">
+            <div>
+                <div style="font-size: 1.1rem; font-weight: 600; color: #fff; margin-bottom: 5px;">
+                    Send if inactive for > ${rule.period_value} ${rule.period_unit}
+                </div>
+                <div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 10px;">
+                    "${escapeHtml(rule.message)}"
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <span style="display: inline-block; width: 8px; height: 8px; background: ${rule.is_active ? '#10b981' : '#ef4444'}; border-radius: 50%;"></span>
+                    <span style="font-size: 0.8rem; color: #94a3b8;">${rule.is_active ? 'Active' : 'Paused'}</span>
+                </div>
+            </div>
+            <div>
+                <button onclick="deleteRule('${rule.id}')" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 4px; padding: 6px 12px; cursor: pointer;">Delete</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function saveRule() {
+    const period_value = parseInt(elements.rulePeriodValue.value);
+    const period_unit = elements.rulePeriodUnit.value;
+    const message = elements.ruleMessage.value.trim();
+
+    if (!period_value || !message) {
+        showToast('Please provide an inactivity period and a message.', 'error');
+        return;
+    }
+
+    try {
+        elements.saveRuleBtn.disabled = true;
+        const response = await fetch('/api/rules', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ period_value, period_unit, message })
+        });
+        const data = await response.json();
+        
+        if (response.ok) {
+            showToast('Rule saved successfully.', 'success');
+            elements.ruleMessage.value = '';
+            elements.rulePeriodValue.value = '30';
+            elements.addRuleForm.style.display = 'none';
+            loadRules(); // reload
+        } else {
+            showToast(data.error || 'Failed to save rule', 'error');
+        }
+    } catch (error) {
+        showToast('Save error: ' + error.message, 'error');
+    } finally {
+        elements.saveRuleBtn.disabled = false;
+    }
+}
+
+window.deleteRule = async function(ruleId) {
+    if(!confirm("Are you sure you want to delete this rule?")) return;
+    try {
+        const response = await fetch('/api/rules/' + ruleId, { method: 'DELETE' });
+        if(response.ok) {
+            showToast('Rule deleted', 'success');
+            loadRules(); // Reload rules
+        } else {
+            showToast('Failed to delete rule', 'error');
+        }
+    } catch(err) {
+        showToast('Delete error: ' + err.message, 'error');
     }
 }
 
@@ -651,10 +718,11 @@ function initEventListeners() {
         });
     });
     
-    // Automation
-    elements.applyThresholdBtn.addEventListener('click', applyThreshold);
-    elements.sendMessagesBtn.addEventListener('click', sendMessages);
-    elements.stopAutomationBtn.addEventListener('click', stopAutomation);
+    // Automation Buttons
+    if (elements.sendBroadcastBtn) elements.sendBroadcastBtn.addEventListener('click', sendBroadcast);
+    if (elements.addRuleBtn) elements.addRuleBtn.addEventListener('click', () => { elements.addRuleForm.style.display = 'block'; });
+    if (elements.cancelRuleBtn) elements.cancelRuleBtn.addEventListener('click', () => { elements.addRuleForm.style.display = 'none'; });
+    if (elements.saveRuleBtn) elements.saveRuleBtn.addEventListener('click', saveRule);
     
     // Logs
     elements.refreshLogsBtn.addEventListener('click', loadLogs);
@@ -686,10 +754,8 @@ async function init() {
     // Load dashboard
     await loadDashboard();
     
-    // Set default date to 30 days ago
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    elements.thresholdDate.value = thirtyDaysAgo.toISOString().split('T')[0];
+    // Load rules
+    await loadRules();
     
     showToast('Application loaded', 'info');
 }
