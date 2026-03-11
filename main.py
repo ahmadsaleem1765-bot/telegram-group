@@ -97,14 +97,22 @@ app_state = AppState()
 inactivity_filter: Optional[InactivityFilter] = None
 
 
-def run_async(coro):
-    """Run async coroutine in sync context"""
-    loop = asyncio.new_event_loop()
+import threading
+
+# Global event loop for background tasks and Telegram client
+_global_loop = asyncio.new_event_loop()
+
+def _start_background_loop(loop):
     asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+    loop.run_forever()
+
+_loop_thread = threading.Thread(target=_start_background_loop, args=(_global_loop,), daemon=True)
+_loop_thread.start()
+
+def run_async(coro):
+    """Run async coroutine in sync context safely"""
+    future = asyncio.run_coroutine_threadsafe(coro, _global_loop)
+    return future.result()
 
 
 # ==================== Routes ====================
@@ -158,6 +166,130 @@ def auth_login():
     
     app_state.add_log("Authentication failed", "error")
     return jsonify({'error': 'Authentication failed'}), 401
+
+
+def save_credentials_to_env(api_id, api_hash, session_string):
+    """Save credentials to .env file"""
+    try:
+        import dotenv
+        env_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
+        if not os.path.exists(env_file):
+            env_file = '.env'
+        
+        dotenv.set_key(env_file, 'API_ID', str(api_id))
+        dotenv.set_key(env_file, 'API_HASH', api_hash)
+        if session_string:
+            dotenv.set_key(env_file, 'SESSION_STRING', session_string)
+            config.session_string = session_string
+    except Exception as e:
+        logger.error(f"Failed to save to .env: {e}")
+
+
+@app.route('/api/auth/request-code', methods=['POST'])
+def auth_request_code():
+    """Request SMS code for native phone login"""
+    data = request.get_json()
+    api_id = data.get('api_id')
+    api_hash = data.get('api_hash')
+    phone = data.get('phone')
+    
+    if not all([api_id, api_hash, phone]):
+        return jsonify({'error': 'API ID, API Hash, and Phone are required'}), 400
+        
+    config.api_id = str(api_id)
+    config.api_hash = api_hash
+    
+    app_state.add_log(f"Requesting SMS code for {phone}...")
+    
+    try:
+        phone_code_hash = run_async(client_manager.start_with_phone(phone))
+        return jsonify({
+            'success': True,
+            'phone_code_hash': phone_code_hash
+        })
+    except Exception as e:
+        app_state.add_log(f"Failed to request code: {str(e)}", "error")
+        return jsonify({'error': str(e)}), 400
+
+
+@app.route('/api/auth/verify-code', methods=['POST'])
+def auth_verify_code():
+    """Verify SMS code"""
+    data = request.get_json()
+    phone = data.get('phone')
+    code = data.get('code')
+    phone_code_hash = data.get('phone_code_hash')
+    
+    if not all([phone, code, phone_code_hash]):
+        return jsonify({'error': 'Phone, code, and hash are required'}), 400
+        
+    app_state.add_log("Verifying SMS code...")
+    
+    from telethon.errors import SessionPasswordNeededError
+    
+    try:
+        session_string = run_async(client_manager.verify_code(phone, code, phone_code_hash))
+        if session_string:
+            app_state.user = client_manager.user
+            app_state.add_log(f"Authenticated as {app_state.user.display_name}")
+            
+            # Save to .env
+            save_credentials_to_env(config.api_id, config.api_hash, session_string)
+            
+            return jsonify({
+                'success': True,
+                'user': {
+                    'id': app_state.user.id,
+                    'name': app_state.user.display_name,
+                    'username': app_state.user.username
+                },
+                'session_string': session_string
+            })
+        return jsonify({'error': 'Invalid code'}), 400
+    except SessionPasswordNeededError:
+        app_state.add_log("2FA Password required", "info")
+        return jsonify({
+            'success': False,
+            'password_required': True
+        })
+    except Exception as e:
+        app_state.add_log(f"Verification failed: {str(e)}", "error")
+        return jsonify({'error': str(e)}), 400
+
+
+@app.route('/api/auth/verify-password', methods=['POST'])
+def auth_verify_password():
+    """Verify 2FA password"""
+    data = request.get_json()
+    password = data.get('password')
+    
+    if not password:
+        return jsonify({'error': 'Password is required'}), 400
+        
+    app_state.add_log("Verifying 2FA password...")
+    
+    try:
+        session_string = run_async(client_manager.verify_password(password))
+        if session_string:
+            app_state.user = client_manager.user
+            app_state.add_log(f"Authenticated as {app_state.user.display_name}")
+            
+            # Save to .env
+            save_credentials_to_env(config.api_id, config.api_hash, session_string)
+            
+            return jsonify({
+                'success': True,
+                'user': {
+                    'id': app_state.user.id,
+                    'name': app_state.user.display_name,
+                    'username': app_state.user.username
+                },
+                'session_string': session_string
+            })
+        return jsonify({'error': 'Verification failed'}), 400
+    except Exception as e:
+        app_state.add_log(f"Password verification failed: {str(e)}", "error")
+        return jsonify({'error': str(e)}), 400
 
 
 @app.route('/api/auth/logout', methods=['POST'])

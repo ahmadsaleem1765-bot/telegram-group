@@ -64,7 +64,15 @@ const elements = {
     loginModal: document.getElementById('loginModal'),
     closeLoginModal: document.getElementById('closeLoginModal'),
     cancelLoginBtn: document.getElementById('cancelLoginBtn'),
-    sessionString: document.getElementById('sessionString'),
+    loginModalTitle: document.getElementById('loginModalTitle'),
+    loginStep1: document.getElementById('loginStep1'),
+    loginStep2: document.getElementById('loginStep2'),
+    loginStep3: document.getElementById('loginStep3'),
+    apiId: document.getElementById('apiId'),
+    apiHash: document.getElementById('apiHash'),
+    phoneNumber: document.getElementById('phoneNumber'),
+    verificationCode: document.getElementById('verificationCode'),
+    twoFaPassword: document.getElementById('twoFaPassword'),
     loginBtn: document.getElementById('loginBtn'),
     
     // Toast
@@ -137,31 +145,161 @@ function updateAuthUI() {
     }
 }
 
+const loginState = {
+    step: 1, // 1: request code, 2: verify code, 3: verify password
+    phoneCodeHash: null,
+    phone: null
+};
+
+function resetLoginModal() {
+    loginState.step = 1;
+    loginState.phoneCodeHash = null;
+    loginState.phone = null;
+    
+    elements.apiId.value = '';
+    elements.apiHash.value = '';
+    elements.phoneNumber.value = '';
+    elements.verificationCode.value = '';
+    elements.twoFaPassword.value = '';
+    
+    elements.loginStep1.style.display = 'block';
+    elements.loginStep2.style.display = 'none';
+    elements.loginStep3.style.display = 'none';
+    
+    elements.loginModalTitle.textContent = 'Connect Telegram';
+    elements.loginBtn.textContent = 'Request Code';
+}
+
 function openLoginModal() {
+    resetLoginModal();
     elements.loginModal.classList.add('active');
 }
 
 function closeLoginModal() {
     elements.loginModal.classList.remove('active');
-    elements.sessionString.value = '';
+    resetLoginModal();
 }
 
-async function login() {
-    const sessionString = elements.sessionString.value.trim();
+async function processLoginStep() {
+    if (loginState.step === 1) {
+        await requestSmsCode();
+    } else if (loginState.step === 2) {
+        await verifySmsCode();
+    } else if (loginState.step === 3) {
+        await verifyTwoFaPassword();
+    }
+}
+
+async function requestSmsCode() {
+    const apiId = elements.apiId.value.trim();
+    const apiHash = elements.apiHash.value.trim();
+    const phone = elements.phoneNumber.value.trim();
     
-    if (!sessionString) {
-        showToast('Please enter a session string', 'error');
+    if (!apiId || !apiHash || !phone) {
+        showToast('API ID, API Hash, and Phone Number are required', 'error');
         return;
     }
     
     try {
         elements.loginBtn.disabled = true;
-        elements.loginBtn.innerHTML = '<span class="spinner"></span>';
+        elements.loginBtn.innerHTML = '<span class="spinner"></span> Requesting...';
         
-        const response = await fetch('/api/auth/login', {
+        const response = await fetch('/api/auth/request-code', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ session_string: sessionString })
+            body: JSON.stringify({ api_id: apiId, api_hash: apiHash, phone })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            loginState.phoneCodeHash = data.phone_code_hash;
+            loginState.phone = phone;
+            loginState.step = 2;
+            
+            elements.loginStep1.style.display = 'none';
+            elements.loginStep2.style.display = 'block';
+            elements.loginModalTitle.textContent = 'Verification Code';
+            elements.loginBtn.textContent = 'Verify Code';
+            showToast('Code requested successfully!', 'success');
+        } else {
+            showToast(data.error || 'Failed to request code', 'error');
+        }
+    } catch (error) {
+        showToast('Error: ' + error.message, 'error');
+    } finally {
+        elements.loginBtn.disabled = false;
+        if (loginState.step === 1) elements.loginBtn.textContent = 'Request Code';
+    }
+}
+
+async function verifySmsCode() {
+    const code = elements.verificationCode.value.trim();
+    
+    if (!code) {
+        showToast('Verification code is required', 'error');
+        return;
+    }
+    
+    try {
+        elements.loginBtn.disabled = true;
+        elements.loginBtn.innerHTML = '<span class="spinner"></span> Verifying...';
+        
+        const response = await fetch('/api/auth/verify-code', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                phone: loginState.phone, 
+                code, 
+                phone_code_hash: loginState.phoneCodeHash 
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            if (data.password_required) {
+                loginState.step = 3;
+                elements.loginStep2.style.display = 'none';
+                elements.loginStep3.style.display = 'block';
+                elements.loginModalTitle.textContent = 'Two-Step Verification';
+                elements.loginBtn.textContent = 'Submit Password';
+                showToast('2FA Password required', 'info');
+            } else {
+                // Success
+                state.isAuthenticated = true;
+                state.user = data.user;
+                updateAuthUI();
+                closeLoginModal();
+                showToast('Connected successfully!', 'success');
+            }
+        } else {
+            showToast(data.error || 'Verification failed', 'error');
+        }
+    } catch (error) {
+        showToast('Error: ' + error.message, 'error');
+    } finally {
+        elements.loginBtn.disabled = false;
+        if (loginState.step === 2) elements.loginBtn.textContent = 'Verify Code';
+    }
+}
+
+async function verifyTwoFaPassword() {
+    const password = elements.twoFaPassword.value.trim();
+    
+    if (!password) {
+        showToast('Password is required', 'error');
+        return;
+    }
+    
+    try {
+        elements.loginBtn.disabled = true;
+        elements.loginBtn.innerHTML = '<span class="spinner"></span> Verifying...';
+        
+        const response = await fetch('/api/auth/verify-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password })
         });
         
         const data = await response.json();
@@ -173,13 +311,13 @@ async function login() {
             closeLoginModal();
             showToast('Connected successfully!', 'success');
         } else {
-            showToast(data.error || 'Login failed', 'error');
+            showToast(data.error || 'Password verification failed', 'error');
         }
     } catch (error) {
-        showToast('Login failed: ' + error.message, 'error');
+        showToast('Error: ' + error.message, 'error');
     } finally {
         elements.loginBtn.disabled = false;
-        elements.loginBtn.textContent = 'Connect';
+        if (loginState.step === 3) elements.loginBtn.textContent = 'Submit Password';
     }
 }
 
@@ -496,7 +634,7 @@ function initEventListeners() {
     elements.connectBtn.addEventListener('click', openLoginModal);
     elements.closeLoginModal.addEventListener('click', closeLoginModal);
     elements.cancelLoginBtn.addEventListener('click', closeLoginModal);
-    elements.loginBtn.addEventListener('click', login);
+    elements.loginBtn.addEventListener('click', processLoginStep);
     
     // Dashboard actions
     elements.scanGroupsBtn.addEventListener('click', scanGroups);

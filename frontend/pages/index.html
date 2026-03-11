@@ -350,20 +350,48 @@
     <div class="modal-overlay" id="loginModal">
         <div class="modal">
             <div class="modal-header">
-                <h2>Connect Telegram</h2>
+                <h2 id="loginModalTitle">Connect Telegram</h2>
                 <button class="modal-close" id="closeLoginModal">&times;</button>
             </div>
-            <div class="modal-body">
-                <p>Enter your session string to connect. You can get this from the Telegram app configuration.</p>
+            
+            <!-- Step 1: API / Phone -->
+            <div class="modal-body" id="loginStep1">
+                <p>Enter your API credentials and phone number. Get API details from <a href="https://my.telegram.org/apps" target="_blank" style="color: var(--primary);">my.telegram.org</a>.</p>
                 <div class="form-group">
-                    <label>Session String</label>
-                    <textarea id="sessionString" class="input textarea" rows="4" placeholder="Paste your session string here..."></textarea>
+                    <label>API ID</label>
+                    <input type="text" id="apiId" class="input" placeholder="e.g. 1234567">
                 </div>
-                <p class="help-text">Don't have a session string? You'll need to generate one using the Telegram CLI or API.</p>
+                <div class="form-group">
+                    <label>API Hash</label>
+                    <input type="text" id="apiHash" class="input" placeholder="e.g. 0123456789abcdef0123456789abcdef">
+                </div>
+                <div class="form-group">
+                    <label>Phone Number <small style="color: var(--text-secondary);">(with country code, e.g. +1234567890)</small></label>
+                    <input type="text" id="phoneNumber" class="input" placeholder="e.g. +1234567890">
+                </div>
             </div>
+
+            <!-- Step 2: Verification Code -->
+            <div class="modal-body" id="loginStep2" style="display: none;">
+                <p>A verification code was sent to your Telegram app. Please enter it below.</p>
+                <div class="form-group">
+                    <label>Verification Code</label>
+                    <input type="text" id="verificationCode" class="input" placeholder="e.g. 12345">
+                </div>
+            </div>
+
+            <!-- Step 3: Two-Factor Password -->
+            <div class="modal-body" id="loginStep3" style="display: none;">
+                <p>Your account has Two-Step Verification enabled. Please enter your password.</p>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="twoFaPassword" class="input" placeholder="Enter password">
+                </div>
+            </div>
+
             <div class="modal-footer">
                 <button class="btn btn-secondary" id="cancelLoginBtn">Cancel</button>
-                <button class="btn btn-primary" id="loginBtn">Connect</button>
+                <button class="btn btn-primary" id="loginBtn">Request Code</button>
             </div>
         </div>
     </div>
