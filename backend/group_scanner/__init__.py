@@ -104,7 +104,7 @@ class GroupScanner:
                 entity = dialog.entity
                 if isinstance(entity, Channel) and entity.megagroup:
                     group_dialogs.append((dialog, entity))
-                elif isinstance(entity, Chat) and entity.participants:
+                elif isinstance(entity, Chat):
                     group_dialogs.append((dialog, entity))
             
             total_groups = len(group_dialogs)
@@ -154,7 +154,7 @@ class GroupScanner:
             group_id = entity.id
             group_name = getattr(entity, 'title', None) or dialog.name
             group_username = getattr(entity, 'username', None)
-            member_count = getattr(entity, 'participants_count', None) or getattr(entity, 'megagroup', None)
+            member_count = getattr(entity, 'participants_count', None)
             
             # Try to get the last message
             last_message_time = None

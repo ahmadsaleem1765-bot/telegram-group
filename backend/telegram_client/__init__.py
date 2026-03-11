@@ -12,8 +12,9 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from telethon import TelegramClient
+from telethon.sessions import StringSession
 from telethon.errors import (
-    SessionPasswordNeededError, 
+    SessionPasswordNeededError,
     PhoneCodeInvalidError,
     ApiIdInvalidError,
     FloodWaitError
@@ -131,7 +132,7 @@ class TelegramClientManager:
         
         return sent_code.phone_code_hash
     
-    async def verify_code(self, phone: str, code: str, phone_code_hash: str) -> bool:
+    async def verify_code(self, phone: str, code: str, phone_code_hash: str) -> Optional[str]:
         """Verify the SMS code"""
         try:
             await self._client.sign_in(phone, code, phone_code_hash=phone_code_hash)
@@ -211,7 +212,7 @@ class TelegramClientManager:
             # Check if it's a group (channel or megagroup)
             if isinstance(entity, Channel) and entity.megagroup:
                 groups.append(entity)
-            elif isinstance(entity, Chat) and entity.participants:
+            elif isinstance(entity, Chat):
                 groups.append(entity)
         
         return groups
@@ -221,8 +222,6 @@ class TelegramClientManager:
 client_manager = TelegramClientManager()
 
 
-# For backwards compatibility
-from telethon.sessions import StringSession
 
 __all__ = [
     'TelegramClientManager',
