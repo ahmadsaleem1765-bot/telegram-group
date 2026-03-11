@@ -37,10 +37,13 @@ const elements = {
     // Groups
     groupSearch: document.getElementById('groupSearch'),
     filterBtns: document.querySelectorAll('.filter-btn'),
-    groupsTableBody: document.getElementById('groupsTableBody'),
-    
     // Automation
     broadcastTarget: document.getElementById('broadcastTarget'),
+    broadcastInactivityPeriodContainer: document.getElementById('broadcastInactivityPeriodContainer'),
+    broadcastPeriodValue: document.getElementById('broadcastPeriodValue'),
+    broadcastPeriodUnit: document.getElementById('broadcastPeriodUnit'),
+    broadcastPreviewContainer: document.getElementById('broadcastPreviewContainer'),
+    broadcastPreviewText: document.getElementById('broadcastPreviewText'),
     broadcastMessage: document.getElementById('broadcastMessage'),
     sendBroadcastBtn: document.getElementById('sendBroadcastBtn'),
     
@@ -498,6 +501,53 @@ async function applyThreshold() {
 }
 
 // ==================== Message Automation & Rules ====================
+async function updateBroadcastPreview() {
+    if (!state.groups || state.groups.length === 0) {
+        if(elements.broadcastPreviewContainer) elements.broadcastPreviewContainer.style.display = 'none';
+        return;
+    }
+
+    const target = elements.broadcastTarget.value;
+    if (target === 'all') {
+        elements.broadcastInactivityPeriodContainer.style.display = 'none';
+        elements.broadcastPreviewContainer.style.display = 'block';
+        elements.broadcastPreviewText.textContent = `Ready to send to ${state.groups.length} groups`;
+        return;
+    }
+
+    // Inactive Groups calculation
+    elements.broadcastInactivityPeriodContainer.style.display = 'block';
+    elements.broadcastPreviewContainer.style.display = 'block';
+    
+    const val = parseInt(elements.broadcastPeriodValue.value);
+    const unit = elements.broadcastPeriodUnit.value;
+    
+    if (isNaN(val) || val <= 0) {
+        elements.broadcastPreviewText.textContent = `Invalid period entered.`;
+        return;
+    }
+
+    // Convert to seconds
+    let secondsAgo = val;
+    if (unit === 'Minutes') secondsAgo *= 60;
+    else if (unit === 'Hours') secondsAgo *= 3600;
+    else if (unit === 'Days') secondsAgo *= 86400;
+
+    const thresholdMs = Date.now() - (secondsAgo * 1000);
+    
+    let inactiveCount = 0;
+    for(const group of state.groups) {
+        if (!group.last_message_time) {
+            inactiveCount++; // assume inactive if no messages
+        } else {
+            const lastMsgDate = new Date(group.last_message_time).getTime();
+            if (lastMsgDate < thresholdMs) inactiveCount++;
+        }
+    }
+
+    elements.broadcastPreviewText.textContent = `Ready to send to ${inactiveCount} inactive groups`;
+}
+
 async function sendBroadcast() {
     if (state.isSending) return;
     
@@ -509,6 +559,11 @@ async function sendBroadcast() {
     }
     
     const config = { target, message };
+
+    if (target === 'inactive') {
+        config.period_value = parseInt(elements.broadcastPeriodValue.value);
+        config.period_unit = elements.broadcastPeriodUnit.value;
+    }
     
     try {
         state.isSending = true;
@@ -719,6 +774,9 @@ function initEventListeners() {
     });
     
     // Automation Buttons
+    if (elements.broadcastTarget) elements.broadcastTarget.addEventListener('change', updateBroadcastPreview);
+    if (elements.broadcastPeriodValue) elements.broadcastPeriodValue.addEventListener('input', updateBroadcastPreview);
+    if (elements.broadcastPeriodUnit) elements.broadcastPeriodUnit.addEventListener('change', updateBroadcastPreview);
     if (elements.sendBroadcastBtn) elements.sendBroadcastBtn.addEventListener('click', sendBroadcast);
     if (elements.addRuleBtn) elements.addRuleBtn.addEventListener('click', () => { elements.addRuleForm.style.display = 'block'; });
     if (elements.cancelRuleBtn) elements.cancelRuleBtn.addEventListener('click', () => { elements.addRuleForm.style.display = 'none'; });

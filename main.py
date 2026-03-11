@@ -103,8 +103,85 @@ import threading
 # Global event loop for background tasks and Telegram client
 _global_loop = asyncio.new_event_loop()
 
+async def automation_worker():
+    """Background task to process automation rules periodically"""
+    while True:
+        try:
+            await asyncio.sleep(60) # Check every minute
+            
+            if not client_manager.is_authenticated:
+                continue
+            if app_state.is_scanning or app_state.is_sending or sender.is_running:
+                continue
+                
+            active_rules = [r for r in rules_engine.get_rules() if r.is_active]
+            if not active_rules or not app_state.groups:
+                continue
+                
+            from datetime import timezone, timedelta
+            now = datetime.now(timezone.utc)
+            
+            for rule in active_rules:
+                if sender.is_running or app_state.is_sending:
+                    break
+                    
+                if rule.period_unit == 'Minutes':
+                    delta = timedelta(minutes=rule.period_value)
+                elif rule.period_unit == 'Hours':
+                    delta = timedelta(hours=rule.period_value)
+                else:
+                    delta = timedelta(days=rule.period_value)
+                    
+                threshold_time = now - delta
+                
+                groups_to_send = []
+                for g in app_state.groups:
+                    if g.last_message_time:
+                        try:
+                            msg_time = g.last_message_time
+                            if msg_time.tzinfo is None:
+                                msg_time = msg_time.replace(tzinfo=timezone.utc)
+                            if msg_time < threshold_time:
+                                groups_to_send.append(g)
+                        except Exception:
+                            groups_to_send.append(g)
+                    else:
+                        groups_to_send.append(g)
+                        
+                if groups_to_send:
+                    config_obj = AutomationConfig(
+                        message_template=rule.message,
+                        delay_min=10,
+                        delay_max=30,
+                        max_messages=1000,
+                        dry_run=False
+                    )
+                    
+                    app_state.is_sending = True
+                    app_state.add_log(f"Auto-rule triggered: {len(groups_to_send)} groups detected")
+                    try:
+                        await sender.send_messages(
+                            groups_to_send, 
+                            config_obj, 
+                            log_callback=lambda msg: app_state.add_log(msg)
+                        )
+                    except Exception as e:
+                        app_state.add_log(f"Auto-rule error: {e}", "error")
+                    finally:
+                        app_state.is_sending = False
+                        
+                    # Stop after executing one rule to avoid flooding
+                    # Next minute it can evaluate the remaining/others if necessary
+                    break
+                    
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"Automation worker error: {e}")
+
 def _start_background_loop(loop):
     asyncio.set_event_loop(loop)
+    loop.create_task(automation_worker())
     loop.run_forever()
 
 _loop_thread = threading.Thread(target=_start_background_loop, args=(_global_loop,), daemon=True)
@@ -450,14 +527,47 @@ def send_messages():
     target = data.get('target', 'all')  # "all" or "inactive"
     
     if target == 'inactive':
-        # Temporary logic: send to any group inactive > 30 days if not previously processed by filter
-        # Better: apply a 30 day default filter if needed
-        groups_to_send = app_state.inactive_groups if app_state.inactive_groups else app_state.groups
+        period_value = int(data.get('period_value', 30))
+        period_unit = data.get('period_unit', 'Days')
+        
+        # Calculate threshold time
+        from datetime import timezone, timedelta
+        now = datetime.now(timezone.utc)
+        if period_unit == 'Minutes':
+            delta = timedelta(minutes=period_value)
+        elif period_unit == 'Hours':
+            delta = timedelta(hours=period_value)
+        else: # Days
+            delta = timedelta(days=period_value)
+            
+        threshold_time = now - delta
+        
+        # Filter groups manually here
+        groups_to_send = []
+        for g in app_state.groups:
+            if g.last_message_time:
+                try:
+                    # g.last_message_time is a datetime object from telethon (UTC)
+                    msg_time = g.last_message_time
+                    # Ensure both are aware or naive. Telethon dates are usually UTC aware.
+                    # If msg_time is naive for some reason, make it aware.
+                    if msg_time.tzinfo is None:
+                        msg_time = msg_time.replace(tzinfo=timezone.utc)
+                        
+                    if msg_time < threshold_time:
+                        groups_to_send.append(g)
+                except Exception as e:
+                    logger.error(f"Error parsing date for {g.name}: {e}")
+                    # If we can't parse, assume inactive and send
+                    groups_to_send.append(g)
+            else:
+                # No message time = inactive
+                groups_to_send.append(g)
     else:
         groups_to_send = app_state.groups
         
     if not groups_to_send:
-        return jsonify({'error': 'No groups to send to (try scanning first)'}), 400
+        return jsonify({'error': 'No groups to send to (try scanning first or increasing filter period)'}), 400
     
     if not message_template.strip():
         return jsonify({'error': 'Message required'}), 400
@@ -473,9 +583,6 @@ def send_messages():
     app_state.is_sending = True
     app_state.add_log(f"Starting broadcast to {target} groups...")
     
-    if dry_run:
-        app_state.add_log("DRY RUN MODE - No messages will be sent")
-    
     try:
         def progress_callback(current: int, total: int, result):
             status = "sent" if result.status == SendStatus.SENT else "failed"
@@ -484,7 +591,7 @@ def send_messages():
             )
         
         results = run_async(sender.send_messages(
-            app_state.inactive_groups,
+            groups_to_send,
             config_obj,
             progress_callback=progress_callback
         ))

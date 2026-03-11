@@ -163,63 +163,79 @@ class MessageSender:
         self.reset()
         self._is_running = True
         
-        # Limit groups to max_messages
-        groups_to_send = groups[:config.max_messages]
-        total = len(groups_to_send)
-        
-        log_callback = log_callback or logger.info
-        
-        log_callback(f"Starting message automation to {total} groups")
-        
-        for idx, group in enumerate(groups_to_send):
-            # Check if should stop
-            if self._should_stop:
-                log_callback("Message sending stopped by user")
-                break
+        try:
+            # Limit groups to max_messages
+            groups_to_send = groups[:config.max_messages]
+            total = len(groups_to_send)
             
-            # Wait for random delay (except for first message)
-            if idx > 0:
-                delay = config.get_random_delay()
-                log_callback(f"Waiting {delay:.1f} seconds before next message...")
-                await asyncio.sleep(delay)
+            log_callback = log_callback or logger.info
             
-            # Check if paused
-            while self._is_paused and not self._should_stop:
-                await asyncio.sleep(1)
+            log_callback(f"Starting message automation to {total} groups")
             
-            if self._should_stop:
-                break
+            for idx, group in enumerate(groups_to_send):
+                # Check if should stop
+                if self._should_stop:
+                    log_callback("Message sending stopped by user")
+                    break
+                
+                # Wait for random delay (except for first message)
+                if idx > 0:
+                    delay = config.get_random_delay()
+                    log_callback(f"Waiting {delay:.1f} seconds before next message...")
+                    await asyncio.sleep(delay)
+                
+                # Check if paused
+                while self._is_paused and not self._should_stop:
+                    await asyncio.sleep(1)
+                
+                if self._should_stop:
+                    break
+                
+                # Prepare message with dynamic variables
+                try:
+                    message = self._prepare_message(config.message_template, group)
+                except Exception as e:
+                    logger.error(f"Error preparing message for group {group.name}: {e}")
+                    res = MessageResult(
+                        group_id=group.id,
+                        group_name=group.name,
+                        status=SendStatus.FAILED,
+                        message="",
+                        error=f"Template error: {e}"
+                    )
+                    self._results.append(res)
+                    self._failed_count += 1
+                    if progress_callback:
+                        progress_callback(idx + 1, total, res)
+                    continue
+                
+                # Send message (or simulate in dry run)
+                result = await self._send_single_message(
+                    group, 
+                    message, 
+                    dry_run=config.dry_run
+                )
+                
+                self._results.append(result)
+                
+                if result.status == SendStatus.SENT:
+                    self._sent_count += 1
+                    log_callback(f"[{idx + 1}/{total}] Message sent to: {group.name}")
+                elif result.status == SendStatus.FAILED:
+                    self._failed_count += 1
+                    log_callback(f"[{idx + 1}/{total}] Failed to send to: {group.name} - {result.error}")
+                
+                if progress_callback:
+                    progress_callback(idx + 1, total, result)
             
-            # Prepare message with dynamic variables
-            message = self._prepare_message(config.message_template, group)
-            
-            # Send message (or simulate in dry run)
-            result = await self._send_single_message(
-                group, 
-                message, 
-                dry_run=config.dry_run
+            log_callback(
+                f"Message automation complete. "
+                f"Sent: {self._sent_count}, Failed: {self._failed_count}"
             )
             
-            self._results.append(result)
-            
-            if result.status == SendStatus.SENT:
-                self._sent_count += 1
-                log_callback(f"[{idx + 1}/{total}] Message sent to: {group.name}")
-            elif result.status == SendStatus.FAILED:
-                self._failed_count += 1
-                log_callback(f"[{idx + 1}/{total}] Failed to send to: {group.name} - {result.error}")
-            
-            if progress_callback:
-                progress_callback(idx + 1, total, result)
-        
-        self._is_running = False
-        
-        log_callback(
-            f"Message automation complete. "
-            f"Sent: {self._sent_count}, Failed: {self._failed_count}"
-        )
-        
-        return self._results
+            return self._results
+        finally:
+            self._is_running = False
     
     def _prepare_message(self, template: str, group: Group) -> str:
         """Prepare message by replacing dynamic variables"""

@@ -244,8 +244,24 @@
                             <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;">TO:</label>
                             <select id="broadcastTarget" class="input" style="width: 100%; padding: 12px; background: #1f1f22; border: 1px solid #333; border-radius: 8px; color: #fff; margin-top: 8px;">
                                 <option value="all">All Groups</option>
-                                <option value="inactive">Inactive Groups (>30 Days)</option>
+                                <option value="inactive">Inactive Groups</option>
                             </select>
+                        </div>
+                        
+                        <div id="broadcastInactivityPeriodContainer" style="display: none; margin-top: 15px;">
+                            <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;">INACTIVITY PERIOD</label>
+                            <div style="display: flex; gap: 10px; margin-bottom: 15px; margin-top: 8px;">
+                                <input type="number" id="broadcastPeriodValue" class="input" value="30" min="1" style="flex: 1; background: #1f1f22; border: 1px solid #333; border-radius: 8px; color: #fff; padding: 12px;">
+                                <select id="broadcastPeriodUnit" class="input" style="flex: 1; background: #1f1f22; border: 1px solid #333; border-radius: 8px; color: #fff; padding: 12px;">
+                                    <option value="Days">Days</option>
+                                    <option value="Hours">Hours</option>
+                                    <option value="Minutes">Minutes</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div id="broadcastPreviewContainer" style="margin-top: 15px; padding: 10px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; display: none;">
+                            <span style="color: #60a5fa; font-size: 0.9rem;" id="broadcastPreviewText">Ready to send to 0 groups</span>
                         </div>
                         
                         <div class="form-group" style="margin-top: 15px;">
