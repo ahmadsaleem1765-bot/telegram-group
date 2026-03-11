@@ -39,7 +39,8 @@ from backend.scheduler import scheduler, Schedule, ScheduleType
 # Create Flask app
 app = Flask(__name__, 
     template_folder='frontend/pages',
-    static_folder='frontend'
+    static_folder='frontend',
+    static_url_path=''
 )
 CORS(app)
 
