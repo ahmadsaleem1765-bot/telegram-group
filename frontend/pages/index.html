@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Group Automation</title>
+    <link rel="stylesheet" href="/styles/main.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=SF+Pro+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                        <rect width="32" height="32" rx="8" fill="url(#gradient)"/>
+                        <path d="M10 16L14 20L22 12" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        <defs>
+                            <linearGradient id="gradient" x1="0" y1="0" x2="32" y2="32">
+                                <stop stop-color="#007AFF"/>
+                                <stop offset="1" stop-color="#5856D6"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                    <span class="logo-text">Telegram Auto</span>
+                </div>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <button class="nav-item active" data-view="dashboard">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <rect x="2" y="2" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+                        <rect x="11" y="2" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+                        <rect x="2" y="11" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+                        <rect x="11" y="11" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+                    </svg>
+                    Dashboard
+                </button>
+                <button class="nav-item" data-view="groups">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <circle cx="7" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/>
+                        <circle cx="13" cy="6" r="3" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="M2 17C2 14.2386 4.23858 12 7 12C7.5 12 8 12.1 8.5 12.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        <path d="M12 12C12.5 12 13 12.1 13.5 12.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        <path d="M17 17C17 14.2386 14.7614 12 12 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                    Groups
+                </button>
+                <button class="nav-item" data-view="automation">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M10 2V18M2 10H18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.5"/>
+                    </svg>
+                    Automation
+                </button>
+                <button class="nav-item" data-view="logs">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M4 4H16V16H4V4Z" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="M7 8H13M7 12H10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                    Activity Log
+                </button>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <div class="user-info" id="userInfo">
+                    <div class="user-avatar">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <circle cx="10" cy="7" r="3" stroke="currentColor" stroke-width="1.5"/>
+                            <path d="M4 17C4 14.2386 6.23858 12 9 12C9.5 12 10 12.1 10.5 12.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            <path d="M11 12C11.5 12 12.5 12 13 12C15.7614 12 18 14.2386 18 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <div class="user-details">
+                        <span class="user-name" id="userName">Not logged in</span>
+                        <span class="user-status" id="userStatus">Offline</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Dashboard View -->
+            <section class="view active" id="dashboardView">
+                <header class="view-header">
+                    <h1>Dashboard</h1>
+                    <p class="view-subtitle">Monitor your Telegram group activity</p>
+                </header>
+
+                <!-- Stats Cards -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon blue">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+                                <path d="M12 7V12L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                        </div>
+                        <div class="stat-content">
+                            <span class="stat-value" id="totalGroups">0</span>
+                            <span class="stat-label">Total Groups</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon green">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                <path d="M9 12L11 14L15 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                        </div>
+                        <div class="stat-content">
+                            <span class="stat-value" id="activeGroups">0</span>
+                            <span class="stat-label">Active Groups</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon orange">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+                                <path d="M12 8V12M12 16H12.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                        </div>
+                        <div class="stat-content">
+                            <span class="stat-value" id="inactiveGroups">0</span>
+                            <span class="stat-label">Inactive Groups</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="section">
+                    <h2 class="section-title">Quick Actions</h2>
+                    <div class="action-cards">
+                        <div class="action-card" id="loginCard">
+                            <div class="action-icon">
+                                <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                                    <circle cx="16" cy="12" r="5" stroke="currentColor" stroke-width="2"/>
+                                    <path d="M6 28C6 23.5817 9.58172 20 14 20H18C22.4183 20 26 23.5817 26 28" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                            </div>
+                            <h3>Connect Telegram</h3>
+                            <p>Authenticate with your Telegram account to get started</p>
+                            <button class="btn btn-primary" id="connectBtn">Connect</button>
+                        </div>
+                        <div class="action-card">
+                            <div class="action-icon">
+                                <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                                    <circle cx="16" cy="16" r="12" stroke="currentColor" stroke-width="2"/>
+                                    <path d="M16 10V16L21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                            </div>
+                            <h3>Scan Groups</h3>
+                            <p>Discover all Telegram groups you belong to</p>
+                            <button class="btn btn-secondary" id="scanGroupsBtn" disabled>Scan Now</button>
+                        </div>
+                        <div class="action-card">
+                            <div class="action-icon">
+                                <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                                    <path d="M8 12H24M8 16H18M8 20H12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                    <rect x="4" y="4" width="24" height="24" rx="4" stroke="currentColor" stroke-width="2"/>
+                                </svg>
+                            </div>
+                            <h3>Configure Filter</h3>
+                            <p>Set the inactivity threshold date and time</p>
+                            <button class="btn btn-secondary" id="configureFilterBtn" disabled>Configure</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Groups View -->
+            <section class="view" id="groupsView">
+                <header class="view-header">
+                    <h1>Groups</h1>
+                    <p class="view-subtitle">View and manage your Telegram groups</p>
+                </header>
+
+                <!-- Filter Controls -->
+                <div class="filter-bar">
+                    <div class="search-box">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/>
+                            <path d="M11 11L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        </svg>
+                        <input type="text" id="groupSearch" placeholder="Search groups...">
+                    </div>
+                    <div class="filter-buttons">
+                        <button class="filter-btn active" data-filter="all">All</button>
+                        <button class="filter-btn" data-filter="active">Active</button>
+                        <button class="filter-btn" data-filter="inactive">Inactive</button>
+                    </div>
+                </div>
+
+                <!-- Groups Table -->
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Group Name</th>
+                                <th>Last Message</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="groupsTableBody">
+                            <tr>
+                                <td colspan="4" class="empty-state">
+                                    <p>No groups scanned yet. Run a scan from the dashboard.</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Automation View -->
+            <section class="view" id="automationView">
+                <header class="view-header">
+                    <h1>Automation</h1>
+                    <p class="view-subtitle">Configure and run automated messaging</p>
+                </header>
+
+                <div class="automation-grid">
+                    <!-- Inactivity Configuration -->
+                    <div class="card">
+                        <h2 class="card-title">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/>
+                                <path d="M10 6V10M10 14H10.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            </svg>
+                            Inactivity Configuration
+                        </h2>
+                        <div class="form-group">
+                            <label>Select Date</label>
+                            <input type="date" id="thresholdDate" class="input">
+                        </div>
+                        <div class="form-group">
+                            <label>Select Time</label>
+                            <input type="time" id="thresholdTime" class="input" value="00:00">
+                        </div>
+                        <button class="btn btn-secondary" id="applyThresholdBtn">Apply Threshold</button>
+                        <p class="help-text">Groups with last message before this date/time will be marked as inactive.</p>
+                    </div>
+
+                    <!-- Message Configuration -->
+                    <div class="card">
+                        <h2 class="card-title">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M4 4H16V14H6L4 16V4Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                            </svg>
+                            Message Template
+                        </h2>
+                        <div class="form-group">
+                            <label>Message</label>
+                            <textarea id="messageTemplate" class="input textarea" rows="4" placeholder="Hello everyone! This group has been inactive for a while. Just checking in!"></textarea>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Min Delay (seconds)</label>
+                                <input type="number" id="delayMin" class="input" value="10" min="1">
+                            </div>
+                            <div class="form-group">
+                                <label>Max Delay (seconds)</label>
+                                <input type="number" id="delayMax" class="input" value="30" min="1">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Max Messages</label>
+                            <input type="number" id="maxMessages" class="input" value="50" min="1" max="100">
+                        </div>
+                        <div class="checkbox-group">
+                            <label class="checkbox">
+                                <input type="checkbox" id="dryRun">
+                                <span>Preview Mode (Dry Run)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="card full-width">
+                        <h2 class="card-title">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M4 10H16M16 10L11 5M16 10L11 15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            Send Messages
+                        </h2>
+                        <div class="inactive-summary">
+                            <span class="inactive-count" id="inactiveCount">0</span>
+                            <span>inactive groups ready to message</span>
+                        </div>
+                        <div class="button-group">
+                            <button class="btn btn-primary btn-large" id="sendMessagesBtn" disabled>
+                                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                    <path d="M4 10H16M16 10L11 5M16 10L11 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                Start Automation
+                            </button>
+                            <button class="btn btn-danger" id="stopAutomationBtn" style="display: none;">
+                                Stop
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Progress -->
+                    <div class="card full-width" id="progressCard" style="display: none;">
+                        <h2 class="card-title">Progress</h2>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressFill"></div>
+                        </div>
+                        <p class="progress-text" id="progressText">0 / 0 messages sent</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Logs View -->
+            <section class="view" id="logsView">
+                <header class="view-header">
+                    <h1>Activity Log</h1>
+                    <p class="view-subtitle">View all actions and events</p>
+                </header>
+
+                <div class="logs-container">
+                    <div class="logs-header">
+                        <button class="btn btn-secondary btn-small" id="refreshLogsBtn">Refresh</button>
+                        <button class="btn btn-secondary btn-small" id="clearLogsBtn">Clear</button>
+                    </div>
+                    <div class="logs-list" id="logsList">
+                        <div class="log-entry info">
+                            <span class="log-time">--:--</span>
+                            <span class="log-message">Ready to start...</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Login Modal -->
+    <div class="modal-overlay" id="loginModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Connect Telegram</h2>
+                <button class="modal-close" id="closeLoginModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Enter your session string to connect. You can get this from the Telegram app configuration.</p>
+                <div class="form-group">
+                    <label>Session String</label>
+                    <textarea id="sessionString" class="input textarea" rows="4" placeholder="Paste your session string here..."></textarea>
+                </div>
+                <p class="help-text">Don't have a session string? You'll need to generate one using the Telegram CLI or API.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelLoginBtn">Cancel</button>
+                <button class="btn btn-primary" id="loginBtn">Connect</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="/scripts/app.js"></script>
+</body>
+</html>

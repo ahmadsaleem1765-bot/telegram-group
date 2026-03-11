@@ -1,0 +1,50 @@
+# Railway Deployment Configuration
+# https://docs.railway.app/reference/configuration
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# Number of instances to run
+replicas = 1
+
+# Health check path
+healthcheckPath = "/api/dashboard"
+healthcheckTimeout = 30
+
+# Restart policy
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+# Environment variables group
+[env]
+  # Flask settings
+  HOST = "0.0.0.0"
+  PORT = "5000"
+  DEBUG = "false"
+
+  # Data directories
+  DATA_DIR = "/app/data"
+  LOGS_DIR = "/app/logs"
+
+  # Message automation defaults
+  DEFAULT_DELAY_MIN = "10"
+  DEFAULT_DELAY_MAX = "30"
+  MAX_MESSAGES_PER_RUN = "50"
+
+# Variable groups for Telegram credentials
+# You need to set these in Railway dashboard
+[variableGroups]
+# Group for Telegram API credentials
+[[variableGroups.variables]]
+  key = "API_ID"
+  value = "" # Get from https://my.telegram.org/apps
+
+[[variableGroups.variables]]
+  key = "API_HASH"
+  value = "" # Get from https://my.telegram.org/apps
+
+[[variableGroups.variables]]
+  key = "SESSION_STRING"
+  value = "" # Generate using Telethon or use login feature

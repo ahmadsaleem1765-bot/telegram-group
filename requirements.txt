@@ -1,0 +1,25 @@
+# Telegram Group Messaging Automation
+# Python Dependencies
+
+# Web Framework
+Flask==3.0.0
+Flask-CORS==4.0.0
+
+# Telegram Client
+Telethon==1.35.1
+
+# Async Support
+aiohttp==3.9.1
+asyncio-redis==0.16.0
+
+# Configuration
+python-dotenv==1.0.0
+
+# Logging
+python-json-logger==2.0.7
+
+# Production Server
+gunicorn==21.2.0
+
+# Utils
+pytz==2023.3
