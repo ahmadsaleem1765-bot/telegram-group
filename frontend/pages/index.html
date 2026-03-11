@@ -265,26 +265,11 @@
                             <label>Message</label>
                             <textarea id="messageTemplate" class="input textarea" rows="4" placeholder="Hello everyone! This group has been inactive for a while. Just checking in!"></textarea>
                         </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Min Delay (seconds)</label>
-                                <input type="number" id="delayMin" class="input" value="10" min="1">
-                            </div>
-                            <div class="form-group">
-                                <label>Max Delay (seconds)</label>
-                                <input type="number" id="delayMax" class="input" value="30" min="1">
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label>Max Messages</label>
-                            <input type="number" id="maxMessages" class="input" value="50" min="1" max="100">
-                        </div>
-                        <div class="checkbox-group">
-                            <label class="checkbox">
-                                <input type="checkbox" id="dryRun">
-                                <span>Preview Mode (Dry Run)</span>
-                            </label>
-                        </div>
+                        <!-- Hidden advanced settings to keep UI clean -->
+                        <input type="hidden" id="delayMin" value="10">
+                        <input type="hidden" id="delayMax" value="30">
+                        <input type="hidden" id="maxMessages" value="50">
+                        <input type="checkbox" id="dryRun" style="display: none;">
                     </div>
 
                     <!-- Actions -->
