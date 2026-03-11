@@ -36,6 +36,7 @@ const elements = {
     
     // Groups
     groupSearch: document.getElementById('groupSearch'),
+    groupsTableBody: document.getElementById('groupsTableBody'),
     filterBtns: document.querySelectorAll('.filter-btn'),
     // Automation
     broadcastTarget: document.getElementById('broadcastTarget'),
@@ -109,7 +110,12 @@ function switchView(viewId) {
     if (viewId === 'dashboard') {
         loadDashboard();
     } else if (viewId === 'groups') {
+        loadGroups();
         renderGroups();
+    } else if (viewId === 'automation') {
+        // Ensure groups are loaded for broadcast preview
+        loadGroups().then(() => updateBroadcastPreview());
+        loadRules();
     } else if (viewId === 'logs') {
         loadLogs();
     }
@@ -335,12 +341,6 @@ async function loadDashboard() {
         elements.totalGroups.textContent = data.total_groups;
         elements.activeGroups.textContent = data.active_groups;
         elements.inactiveGroups.textContent = data.inactive_groups;
-        
-        if (data.threshold) {
-            const date = new Date(data.threshold);
-            elements.thresholdDate.value = date.toISOString().split('T')[0];
-            elements.thresholdTime.value = date.toTimeString().slice(0, 5);
-        }
         
         // Load groups if we have them
         if (data.total_groups > 0) {
@@ -584,6 +584,11 @@ async function sendBroadcast() {
             elements.progressFill.style.width = '100%';
             elements.progressText.textContent = `${summary.sent} / ${summary.total} sent`;
             elements.broadcastMessage.value = ''; // clear
+            
+            // Refresh groups data and update preview
+            await loadGroups();
+            await loadDashboard();
+            updateBroadcastPreview();
         } else {
             showToast(data.error || 'Broadcast failed', 'error');
         }
@@ -814,6 +819,9 @@ async function init() {
     
     // Load rules
     await loadRules();
+    
+    // Init broadcast preview if groups already loaded
+    updateBroadcastPreview();
     
     showToast('Application loaded', 'info');
 }

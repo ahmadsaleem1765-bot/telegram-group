@@ -36,6 +36,7 @@ from backend.inactivity_filter import create_inactivity_filter, InactivityFilter
 from backend.message_sender import sender, AutomationConfig, SendStatus
 from backend.scheduler import scheduler, Schedule, ScheduleType
 from backend.scheduler.rules_engine import rules_engine, AutomationRule
+from backend import persistence
 
 # Create Flask app
 app = Flask(__name__, 
@@ -73,11 +74,38 @@ class AppState:
         logger.log(getattr(logging, level.upper()), message)
     
     def get_statistics(self) -> Dict[str, Any]:
-        """Get dashboard statistics"""
+        """Get dashboard statistics with dynamic active/inactive computation"""
+        # Compute active/inactive dynamically from groups data
+        active_count = 0
+        inactive_count = 0
+        
+        if self.groups:
+            if self.active_groups or self.inactive_groups:
+                # Use explicitly filtered results if available
+                active_count = len(self.active_groups)
+                inactive_count = len(self.inactive_groups)
+            else:
+                # Auto-compute using a default 30-day threshold
+                from datetime import timezone, timedelta
+                now = datetime.now(timezone.utc)
+                default_threshold = now - timedelta(days=30)
+                
+                for g in self.groups:
+                    if g.last_message_time:
+                        msg_time = g.last_message_time
+                        if msg_time.tzinfo is None:
+                            msg_time = msg_time.replace(tzinfo=timezone.utc)
+                        if msg_time >= default_threshold:
+                            active_count += 1
+                        else:
+                            inactive_count += 1
+                    else:
+                        inactive_count += 1  # No message time = inactive
+        
         return {
             'total_groups': len(self.groups),
-            'active_groups': len(self.active_groups),
-            'inactive_groups': len(self.inactive_groups),
+            'active_groups': active_count,
+            'inactive_groups': inactive_count,
             'is_authenticated': client_manager.is_authenticated,
             'user': {
                 'id': self.user.id if self.user else None,
@@ -96,6 +124,34 @@ app_state = AppState()
 
 # Inactivity filter instance
 inactivity_filter: Optional[InactivityFilter] = None
+
+
+# ==================== Load Persisted State ====================
+def _load_persisted_state():
+    """Load groups and app state from disk on startup"""
+    try:
+        # Load groups
+        groups_data = persistence.load_groups()
+        if groups_data:
+            app_state.groups = [Group.from_dict(g) for g in groups_data]
+            logger.info(f"Restored {len(app_state.groups)} groups from disk")
+        
+        # Load app metadata
+        state_data = persistence.load_app_state()
+        if state_data:
+            if state_data.get('last_scan_time'):
+                app_state.last_scan_time = datetime.fromisoformat(state_data['last_scan_time'])
+            if state_data.get('threshold_datetime'):
+                app_state.threshold_datetime = datetime.fromisoformat(state_data['threshold_datetime'])
+        
+        # Ensure sending flag is reset on startup
+        app_state.is_sending = False
+        app_state.is_scanning = False
+        
+    except Exception as e:
+        logger.error(f"Failed to load persisted state: {e}")
+
+_load_persisted_state()
 
 
 import threading
@@ -407,7 +463,17 @@ def scan_groups():
         
         app_state.groups = groups
         app_state.last_scan_time = datetime.now()
+        # Reset filter results so dashboard recomputes dynamically
+        app_state.active_groups = []
+        app_state.inactive_groups = []
         app_state.add_log(f"Scan complete. Found {len(groups)} groups")
+        
+        # Persist groups and state to disk
+        persistence.save_groups([g.to_dict() for g in groups])
+        persistence.save_app_state({
+            'last_scan_time': app_state.last_scan_time.isoformat() if app_state.last_scan_time else None,
+            'threshold_datetime': app_state.threshold_datetime.isoformat() if app_state.threshold_datetime else None
+        })
         
         return jsonify({
             'success': True,
@@ -484,6 +550,12 @@ def apply_filter():
         app_state.add_log(
             f"Filter applied: {len(active)} active, {len(inactive)} inactive"
         )
+        
+        # Persist updated state
+        persistence.save_app_state({
+            'last_scan_time': app_state.last_scan_time.isoformat() if app_state.last_scan_time else None,
+            'threshold_datetime': app_state.threshold_datetime.isoformat() if app_state.threshold_datetime else None
+        })
         
         return jsonify({
             'success': True,
