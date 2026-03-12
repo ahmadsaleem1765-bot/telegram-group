@@ -453,7 +453,7 @@ async function scanGroups() {
         elements.scanGroupsBtn.disabled = true;
         elements.scanGroupsBtn.innerHTML = '<span class="spinner"></span> Scanning...';
         
-        const response = await fetch('/api/groups/scan', { method: 'POST' });
+        const response = await fetch('/api/groups/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
         const data = await response.json();
         
         if (response.ok) {
