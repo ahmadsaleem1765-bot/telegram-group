@@ -8,19 +8,24 @@ import os
 import json
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field, asdict
 
 from flask import Flask, render_template, request, jsonify, Response
 from flask_cors import CORS
+from telethon import events
+
+# Setup directories
+os.makedirs('logs', exist_ok=True)
+os.makedirs('data', exist_ok=True)
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('logs/app.log'),
+        logging.FileHandler(os.path.join('logs', 'app.log')),
         logging.StreamHandler()
     ]
 )
@@ -46,6 +51,41 @@ app = Flask(__name__,
 )
 CORS(app)
 
+# ==================== Rate Limiting & CSRF Middleware ====================
+import time
+from functools import wraps
+
+auth_rates = {}
+
+def rate_limit(max_requests=5, window=60):
+    """Simple in-memory rate limiter for auth endpoints"""
+    def decorator(f):
+        @wraps(f)
+        def wrapped(*args, **kwargs):
+            ip = request.remote_addr
+            now = time.time()
+            if ip not in auth_rates:
+                auth_rates[ip] = []
+            
+            # Clean up old requests
+            auth_rates[ip] = [req_time for req_time in auth_rates[ip] if now - req_time < window]
+            
+            if len(auth_rates[ip]) >= max_requests:
+                return jsonify({'error': 'Rate limit exceeded. Try again later.'}), 429
+                
+            auth_rates[ip].append(now)
+            return f(*args, **kwargs)
+        return wrapped
+    return decorator
+
+@app.before_request
+def csrf_protect():
+    """Simple CSRF protection verifying standard JSON structure or origin"""
+    if request.method == "POST":
+        # Check standard headers for JSON API to prevent basic CSRF
+        if request.content_type != 'application/json':
+            return jsonify({'error': 'Unsupported Media Type, expected application/json'}), 415
+
 # Application state
 @dataclass
 class AppState:
@@ -59,11 +99,15 @@ class AppState:
     threshold_datetime: Optional[datetime] = None
     logs: List[Dict[str, Any]] = field(default_factory=list)
     last_scan_time: Optional[datetime] = None
+    _is_dirty: bool = False
+    
+    def mark_dirty(self):
+        self._is_dirty = True
     
     def add_log(self, message: str, level: str = "info"):
         """Add a log entry"""
         entry = {
-            'timestamp': datetime.now().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'level': level,
             'message': message
         }
@@ -86,7 +130,7 @@ class AppState:
                 inactive_count = len(self.inactive_groups)
             else:
                 # Auto-compute using a default 30-day threshold
-                from datetime import timezone, timedelta
+                from datetime import timedelta
                 now = datetime.now(timezone.utc)
                 default_threshold = now - timedelta(days=30)
                 
@@ -119,8 +163,11 @@ class AppState:
         }
 
 
+import threading
+
 # Global state
 app_state = AppState()
+app_state_lock = threading.Lock()
 
 # Inactivity filter instance
 inactivity_filter: Optional[InactivityFilter] = None
@@ -153,9 +200,6 @@ def _load_persisted_state():
 
 _load_persisted_state()
 
-
-import threading
-
 # Global event loop for background tasks and Telegram client
 _global_loop = asyncio.new_event_loop()
 
@@ -167,19 +211,31 @@ async def automation_worker():
             
             if not client_manager.is_authenticated:
                 continue
-            if app_state.is_scanning or app_state.is_sending or sender.is_running:
-                continue
+            with app_state_lock:
+                # Handle periodic save if dirty
+                if getattr(app_state, '_is_dirty', False):
+                    try:
+                        persistence.save_groups([g.to_dict() for g in app_state.groups])
+                        app_state._is_dirty = False
+                        logger.debug("Saved groups to disk (live scan update)")
+                    except Exception as e:
+                        logger.error(f"Failed to auto-save groups: {e}")
+                
+                if app_state.is_scanning or app_state.is_sending or sender.is_running:
+                    continue
+                current_groups = list(app_state.groups)
                 
             active_rules = [r for r in rules_engine.get_rules() if r.is_active]
-            if not active_rules or not app_state.groups:
+            if not active_rules or not current_groups:
                 continue
                 
-            from datetime import timezone, timedelta
+            from datetime import timedelta
             now = datetime.now(timezone.utc)
             
             for rule in active_rules:
-                if sender.is_running or app_state.is_sending:
-                    break
+                with app_state_lock:
+                    if sender.is_running or app_state.is_sending:
+                        break
                     
                 if rule.period_unit == 'Minutes':
                     delta = timedelta(minutes=rule.period_value)
@@ -191,7 +247,7 @@ async def automation_worker():
                 threshold_time = now - delta
                 
                 groups_to_send = []
-                for g in app_state.groups:
+                for g in current_groups:
                     if g.last_message_time:
                         try:
                             msg_time = g.last_message_time
@@ -213,18 +269,30 @@ async def automation_worker():
                         dry_run=False
                     )
                     
-                    app_state.is_sending = True
+                    with app_state_lock:
+                        app_state.is_sending = True
                     app_state.add_log(f"Auto-rule triggered: {len(groups_to_send)} groups detected")
                     try:
-                        await sender.send_messages(
+                        results = await sender.send_messages(
                             groups_to_send, 
                             config_obj, 
                             log_callback=lambda msg: app_state.add_log(msg)
                         )
+                        
+                        successful_ids = {r.group_id for r in results if r.status == SendStatus.SENT}
+                        if successful_ids:
+                            now = datetime.now(timezone.utc)
+                            with app_state_lock:
+                                for g in app_state.groups:
+                                    if g.id in successful_ids:
+                                        g.last_message_time = now
+                            persistence.save_groups([g.to_dict() for g in app_state.groups])
+                            
                     except Exception as e:
                         app_state.add_log(f"Auto-rule error: {e}", "error")
                     finally:
-                        app_state.is_sending = False
+                        with app_state_lock:
+                            app_state.is_sending = False
                         
                     # Stop after executing one rule to avoid flooding
                     # Next minute it can evaluate the remaining/others if necessary
@@ -247,6 +315,49 @@ def run_async(coro):
     """Run async coroutine in sync context safely"""
     future = asyncio.run_coroutine_threadsafe(coro, _global_loop)
     return future.result()
+
+
+# ==================== Live Scanner Event Handler ====================
+async def live_scan_handler(event):
+    """Event handler for new messages to update group last_message_time"""
+    if not client_manager.is_authenticated or not event.chat_id:
+        return
+        
+    chat_id = event.chat_id
+    # Ensure ID matches our internal format (Telethon sometimes prefixes group IDs with -100)
+    
+    with app_state_lock:
+        if not app_state.groups:
+            return
+            
+        # Try finding the exact ID or the normalized ID
+        base_id1 = chat_id
+        base_id2 = chat_id
+        if str(chat_id).startswith('-100'):
+            base_id2 = int(str(chat_id)[4:])
+        elif chat_id < 0:
+            base_id2 = -chat_id
+
+        found = False
+        for g in app_state.groups:
+            # Match directly or by base ID
+            if g.id == chat_id or str(g.id).replace('-100', '') == str(base_id1).replace('-100', '') or g.id == base_id2:
+                g.last_message_time = event.date
+                found = True
+                break
+                
+        if found:
+            app_state.mark_dirty()
+
+def register_live_scanner():
+    """Register the live scanner event handler safely"""
+    if client_manager.client and client_manager.is_authenticated:
+        try:
+            # We intercept ONLY incoming messages
+            client_manager.client.add_event_handler(live_scan_handler, events.NewMessage(incoming=True))
+            logger.info("Live scanner registered successfully.")
+        except Exception as e:
+            logger.error(f"Failed to register live scanner: {e}")
 
 
 # ==================== Routes ====================
@@ -274,6 +385,7 @@ def auth_status():
 
 
 @app.route('/api/auth/login', methods=['POST'])
+@rate_limit(max_requests=10, window=60)
 def auth_login():
     """Login with session string"""
     data = request.get_json()
@@ -289,6 +401,7 @@ def auth_login():
     if success:
         app_state.user = client_manager.user
         app_state.add_log(f"Authenticated as {app_state.user.display_name}")
+        register_live_scanner()
         return jsonify({
             'success': True,
             'user': {
@@ -320,6 +433,7 @@ def save_credentials_to_env(api_id, api_hash, session_string):
 
 
 @app.route('/api/auth/request-code', methods=['POST'])
+@rate_limit(max_requests=5, window=60)
 def auth_request_code():
     """Request SMS code for native phone login"""
     data = request.get_json()
@@ -329,6 +443,9 @@ def auth_request_code():
     
     if not all([api_id, api_hash, phone]):
         return jsonify({'error': 'API ID, API Hash, and Phone are required'}), 400
+        
+    if not str(api_id).isdigit():
+        return jsonify({'error': 'API ID must be numeric'}), 400
         
     config.api_id = str(api_id)
     config.api_hash = api_hash
@@ -347,6 +464,7 @@ def auth_request_code():
 
 
 @app.route('/api/auth/verify-code', methods=['POST'])
+@rate_limit(max_requests=10, window=60)
 def auth_verify_code():
     """Verify SMS code"""
     data = request.get_json()
@@ -369,6 +487,7 @@ def auth_verify_code():
             
             # Save to .env
             save_credentials_to_env(config.api_id, config.api_hash, session_string)
+            register_live_scanner()
             
             return jsonify({
                 'success': True,
@@ -392,6 +511,7 @@ def auth_verify_code():
 
 
 @app.route('/api/auth/verify-password', methods=['POST'])
+@rate_limit(max_requests=10, window=60)
 def auth_verify_password():
     """Verify 2FA password"""
     data = request.get_json()
@@ -448,44 +568,47 @@ def scan_groups():
     if not client_manager.is_authenticated:
         return jsonify({'error': 'Not authenticated'}), 401
     
-    if app_state.is_scanning:
-        return jsonify({'error': 'Scan already in progress'}), 400
-    
-    app_state.is_scanning = True
+    with app_state_lock:
+        if app_state.is_scanning:
+            return jsonify({'error': 'Scan already in progress'}), 400
+        
+        app_state.is_scanning = True
     app_state.add_log("Starting group scan...")
     
-    try:
-        def progress_callback(current: int, total: int, group_name: str):
-            app_state.add_log(f"Scanning: {group_name} ({current}/{total})")
+    def progress_callback(current: int, total: int, group_name: str):
+        app_state.add_log(f"Scanning: {group_name} ({current}/{total})")
         
-        # Run async scan
-        groups = run_async(scanner.scan_all_groups(progress_callback=progress_callback))
-        
-        app_state.groups = groups
-        app_state.last_scan_time = datetime.now()
-        # Reset filter results so dashboard recomputes dynamically
-        app_state.active_groups = []
-        app_state.inactive_groups = []
-        app_state.add_log(f"Scan complete. Found {len(groups)} groups")
-        
-        # Persist groups and state to disk
-        persistence.save_groups([g.to_dict() for g in groups])
-        persistence.save_app_state({
-            'last_scan_time': app_state.last_scan_time.isoformat() if app_state.last_scan_time else None,
-            'threshold_datetime': app_state.threshold_datetime.isoformat() if app_state.threshold_datetime else None
-        })
-        
-        return jsonify({
-            'success': True,
-            'groups': [g.to_dict() for g in groups],
-            'count': len(groups)
-        })
-        
-    except Exception as e:
-        app_state.add_log(f"Scan failed: {str(e)}", "error")
-        return jsonify({'error': str(e)}), 500
-    finally:
-        app_state.is_scanning = False
+    async def _run_scan():
+        try:
+            groups = await scanner.scan_all_groups(progress_callback=progress_callback)
+            
+            with app_state_lock:
+                app_state.groups = groups
+                app_state.last_scan_time = datetime.now(timezone.utc)
+                app_state.active_groups = []
+                app_state.inactive_groups = []
+                
+            app_state.add_log(f"Scan complete. Found {len(groups)} groups")
+            
+            # Persist groups and state to disk
+            persistence.save_groups([g.to_dict() for g in groups])
+            persistence.save_app_state({
+                'last_scan_time': app_state.last_scan_time.isoformat() if app_state.last_scan_time else None,
+                'threshold_datetime': app_state.threshold_datetime.isoformat() if app_state.threshold_datetime else None
+            })
+        except Exception as e:
+            app_state.add_log(f"Scan failed: {str(e)}", "error")
+        finally:
+            with app_state_lock:
+                app_state.is_scanning = False
+
+    # Start task in background loop
+    asyncio.run_coroutine_threadsafe(_run_scan(), _global_loop)
+    
+    return jsonify({
+        'success': True,
+        'message': 'Scan started in background'
+    })
 
 
 @app.route('/api/groups', methods=['GET'])
@@ -497,90 +620,7 @@ def get_groups():
     })
 
 
-# ==================== Inactivity Filter API ====================
-
-@app.route('/api/filter/set-threshold', methods=['POST'])
-def set_threshold():
-    """Set inactivity threshold"""
-    data = request.get_json()
-    date_str = data.get('date')
-    time_str = data.get('time', '00:00')
-    
-    if not date_str:
-        return jsonify({'error': 'Date required'}), 400
-    
-    try:
-        # Parse datetime
-        threshold_dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
-        
-        # Create filter if not exists
-        global inactivity_filter
-        inactivity_filter = create_inactivity_filter(scanner)
-        inactivity_filter.set_threshold(threshold_dt)
-        
-        app_state.threshold_datetime = threshold_dt
-        app_state.add_log(f"Threshold set to: {threshold_dt}")
-        
-        return jsonify({
-            'success': True,
-            'threshold': threshold_dt.isoformat()
-        })
-        
-    except ValueError as e:
-        return jsonify({'error': f'Invalid date format: {e}'}), 400
-
-
-@app.route('/api/filter/apply', methods=['POST'])
-def apply_filter():
-    """Apply inactivity filter"""
-    global inactivity_filter
-    
-    if not app_state.groups:
-        return jsonify({'error': 'No groups scanned'}), 400
-    
-    if inactivity_filter is None:
-        return jsonify({'error': 'Threshold not set'}), 400
-    
-    try:
-        active, inactive = inactivity_filter.filter_groups()
-        
-        app_state.active_groups = active
-        app_state.inactive_groups = inactive
-        
-        app_state.add_log(
-            f"Filter applied: {len(active)} active, {len(inactive)} inactive"
-        )
-        
-        # Persist updated state
-        persistence.save_app_state({
-            'last_scan_time': app_state.last_scan_time.isoformat() if app_state.last_scan_time else None,
-            'threshold_datetime': app_state.threshold_datetime.isoformat() if app_state.threshold_datetime else None
-        })
-        
-        return jsonify({
-            'success': True,
-            'active_groups': [g.to_dict() for g in active],
-            'inactive_groups': [g.to_dict() for g in inactive],
-            'statistics': inactivity_filter.get_statistics()
-        })
-        
-    except Exception as e:
-        app_state.add_log(f"Filter error: {str(e)}", "error")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/filter/statistics', methods=['GET'])
-def get_statistics():
-    """Get filter statistics"""
-    if inactivity_filter:
-        return jsonify(inactivity_filter.get_statistics())
-    
-    return jsonify({
-        'total_groups': len(app_state.groups),
-        'active_groups': len(app_state.active_groups),
-        'inactive_groups': len(app_state.inactive_groups),
-        'threshold': app_state.threshold_datetime.isoformat() if app_state.threshold_datetime else None
-    })
+# ==================== Inactivity Filter API (Removed) ====================
 
 
 # ==================== Message Automation API ====================
@@ -591,9 +631,11 @@ def send_messages():
     if not client_manager.is_authenticated:
         return jsonify({'error': 'Not authenticated'}), 401
     
-    if app_state.is_sending:
-        return jsonify({'error': 'Sending already in progress'}), 400
-    
+    with app_state_lock:
+        if app_state.is_sending:
+            return jsonify({'error': 'Sending already in progress'}), 400
+        app_state.is_sending = True
+        
     data = request.get_json() or {}
     message_template = data.get('message', '')
     target = data.get('target', 'all')  # "all" or "inactive"
@@ -603,7 +645,7 @@ def send_messages():
         period_unit = data.get('period_unit', 'Days')
         
         # Calculate threshold time
-        from datetime import timezone, timedelta
+        from datetime import timedelta
         now = datetime.now(timezone.utc)
         if period_unit == 'Minutes':
             delta = timedelta(minutes=period_value)
@@ -652,38 +694,49 @@ def send_messages():
         dry_run=False
     )
     
-    app_state.is_sending = True
     app_state.add_log(f"Starting broadcast to {target} groups...")
     
-    try:
-        def progress_callback(current: int, total: int, result):
-            status = "sent" if result.status == SendStatus.SENT else "failed"
-            app_state.add_log(
-                f"Message {status} to {result.group_name} ({current}/{total})"
-            )
-        
-        results = run_async(sender.send_messages(
-            groups_to_send,
-            config_obj,
-            progress_callback=progress_callback
-        ))
-        
-        summary = sender.get_results_summary()
+    def progress_callback(current: int, total: int, result):
+        status = "sent" if result.status == SendStatus.SENT else "failed"
         app_state.add_log(
-            f"Automation complete: {summary['sent']} sent, {summary['failed']} failed"
+            f"Message {status} to {result.group_name} ({current}/{total})"
         )
         
-        return jsonify({
-            'success': True,
-            'results': [r.to_dict() for r in results],
-            'summary': summary
-        })
-        
-    except Exception as e:
-        app_state.add_log(f"Automation error: {str(e)}", "error")
-        return jsonify({'error': str(e)}), 500
-    finally:
-        app_state.is_sending = False
+    async def _run_send():
+        try:
+            results = await sender.send_messages(
+                groups_to_send,
+                config_obj,
+                progress_callback=progress_callback
+            )
+            
+            successful_ids = {r.group_id for r in results if r.status == SendStatus.SENT}
+            if successful_ids:
+                now = datetime.now(timezone.utc)
+                with app_state_lock:
+                    for g in app_state.groups:
+                        if g.id in successful_ids:
+                            g.last_message_time = now
+                persistence.save_groups([g.to_dict() for g in app_state.groups])
+            
+            summary = sender.get_results_summary()
+            app_state.add_log(
+                f"Automation complete: {summary['sent']} sent, {summary['failed']} failed"
+            )
+            
+        except Exception as e:
+            app_state.add_log(f"Automation error: {str(e)}", "error")
+        finally:
+            with app_state_lock:
+                app_state.is_sending = False
+
+    # Run in background
+    asyncio.run_coroutine_threadsafe(_run_send(), _global_loop)
+    
+    return jsonify({
+        'success': True,
+        'message': 'Broadcast started in background'
+    })
 
 
 @app.route('/api/automation/stop', methods=['POST'])

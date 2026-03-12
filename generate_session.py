@@ -78,8 +78,8 @@ async def main():
         # Import web authorizations
         try:
             await client(ImportWebAuthorizationsLayer())
-        except Exception:
-            pass  # May fail, but not critical
+        except Exception as e:
+            print(f"  Note: Web authorizations import skipped ({e})")
         
         # Get session string
         session_string = client.session.save()

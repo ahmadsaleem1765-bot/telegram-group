@@ -358,15 +358,15 @@
                 <p>Enter your API credentials and phone number. Get API details from <a href="https://my.telegram.org/apps" target="_blank" style="color: var(--primary);">my.telegram.org</a>.</p>
                 <div class="form-group">
                     <label>API ID</label>
-                    <input type="text" id="apiId" class="input" placeholder="e.g. 1234567">
+                    <input type="text" id="apiId" class="input" placeholder="e.g. 1234567" required pattern="[0-9]+">
                 </div>
                 <div class="form-group">
                     <label>API Hash</label>
-                    <input type="text" id="apiHash" class="input" placeholder="e.g. 0123456789abcdef0123456789abcdef">
+                    <input type="text" id="apiHash" class="input" placeholder="e.g. 0123456789abcdef0123456789abcdef" required>
                 </div>
                 <div class="form-group">
                     <label>Phone Number <small style="color: var(--text-secondary);">(with country code, e.g. +1234567890)</small></label>
-                    <input type="text" id="phoneNumber" class="input" placeholder="e.g. +1234567890">
+                    <input type="tel" id="phoneNumber" class="input" placeholder="e.g. +1234567890" required pattern="^\+?[0-9\s\-\(\)]+$">
                 </div>
             </div>
 
@@ -375,7 +375,7 @@
                 <p>A verification code was sent to your Telegram app. Please enter it below.</p>
                 <div class="form-group">
                     <label>Verification Code</label>
-                    <input type="text" id="verificationCode" class="input" placeholder="e.g. 12345">
+                    <input type="text" id="verificationCode" class="input" placeholder="e.g. 12345" required pattern="[0-9]+">
                 </div>
             </div>
 
@@ -384,7 +384,7 @@
                 <p>Your account has Two-Step Verification enabled. Please enter your password.</p>
                 <div class="form-group">
                     <label>Password</label>
-                    <input type="password" id="twoFaPassword" class="input" placeholder="Enter password">
+                    <input type="password" id="twoFaPassword" class="input" placeholder="Enter password" required>
                 </div>
             </div>
 

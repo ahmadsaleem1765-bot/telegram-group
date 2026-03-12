@@ -4,11 +4,11 @@ Backend Package
 Telegram automation backend with modular architecture.
 """
 
-from backend.telegram_client import client_manager, TelegramClientManager, TelegramUser
-from backend.group_scanner import scanner, GroupScanner, Group
-from backend.inactivity_filter import create_inactivity_filter, InactivityFilter, InactivityThreshold
-from backend.message_sender import sender, MessageSender, AutomationConfig, MessageResult, SendStatus
-from backend.scheduler import scheduler, Scheduler, Schedule, ScheduleType
+from .telegram_client import client_manager, TelegramClientManager, TelegramUser
+from .group_scanner import scanner, GroupScanner, Group
+from .inactivity_filter import create_inactivity_filter, InactivityFilter, InactivityThreshold
+from .message_sender import sender, MessageSender, AutomationConfig, MessageResult, SendStatus
+from .scheduler import scheduler, Scheduler, Schedule, ScheduleType
 
 __all__ = [
     # Telegram Client

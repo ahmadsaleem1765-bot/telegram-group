@@ -9,7 +9,7 @@ import random
 import logging
 from typing import List, Optional, Dict, Any, Callable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 from telethon.errors import FloodWaitError, MessageNotModifiedError
@@ -36,7 +36,7 @@ class MessageResult:
     group_name: str
     status: SendStatus
     message: str
-    timestamp: datetime = field(default_factory=datetime.now)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     error: Optional[str] = None
     
     def to_dict(self) -> Dict[str, Any]:
@@ -288,6 +288,7 @@ class MessageSender:
             
         except FloodWaitError as e:
             logger.warning(f"Rate limited, waiting {e.seconds} seconds")
+            await asyncio.sleep(e.seconds)
             return MessageResult(
                 group_id=group.id,
                 group_name=group.name,

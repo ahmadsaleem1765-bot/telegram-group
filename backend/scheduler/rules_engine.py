@@ -6,7 +6,7 @@ Manages multiple automation rules for inactive groups.
 
 import json
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable, Tuple
 from dataclasses import dataclass, field
 import uuid
 from datetime import datetime
@@ -53,6 +53,8 @@ class RulesEngine:
         return self.rules
 
     def add_rule(self, rule: AutomationRule) -> AutomationRule:
+        if not rule.message or not rule.message.strip():
+            raise ValueError("Rule message cannot be empty")
         self.rules.append(rule)
         self.save()
         return rule

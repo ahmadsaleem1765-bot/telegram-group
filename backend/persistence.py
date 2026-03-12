@@ -31,7 +31,7 @@ def _safe_write_json(filepath: str, data: Any):
     temp_path = filepath + '.tmp'
     try:
         with open(temp_path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, default=str)
+            json.dump(data, f, indent=2)
         # Atomic rename (on Windows this may overwrite)
         if os.path.exists(filepath):
             os.remove(filepath)
@@ -44,6 +44,7 @@ def _safe_write_json(filepath: str, data: Any):
 
 def _safe_read_json(filepath: str) -> Optional[Any]:
     """Safely read JSON data from a file"""
+    _ensure_data_dir()
     try:
         if os.path.exists(filepath):
             with open(filepath, 'r', encoding='utf-8') as f:

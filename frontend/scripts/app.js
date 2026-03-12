@@ -139,7 +139,7 @@ async function checkAuthStatus() {
 function updateAuthUI() {
     if (state.isAuthenticated && state.user) {
         elements.userName.textContent = state.user.name;
-        elements.userStatus.textContent = '@' + state.user.username;
+        elements.userStatus.textContent = state.user.username ? '@' + state.user.username : 'No Username';
         elements.connectBtn.textContent = 'Connected';
         elements.connectBtn.disabled = true;
         
@@ -366,6 +366,18 @@ async function loadGroups() {
 
 function renderGroups() {
     const searchTerm = elements.groupSearch.value.toLowerCase();
+    
+    // update is_active for each group based on 30-day threshold
+    const thresholdMs = Date.now() - (30 * 86400 * 1000);
+    state.groups.forEach(g => {
+        if (!g.last_message_time) {
+            g.is_active = false;
+        } else {
+            const lastMsgDate = new Date(g.last_message_time).getTime();
+            g.is_active = lastMsgDate >= thresholdMs;
+        }
+    });
+
     let filteredGroups = state.groups;
     
     // Apply search filter
@@ -414,6 +426,13 @@ function renderGroups() {
     `).join('');
 }
 
+window.viewGroup = function(groupId) {
+    const group = state.groups.find(g => g.id === groupId);
+    if (group) {
+        showToast(`Group: ${group.name} (${group.member_count || 'Unknown'} members)`, 'info');
+    }
+};
+
 function formatDate(dateString) {
     const date = new Date(dateString);
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -438,24 +457,50 @@ async function scanGroups() {
         const data = await response.json();
         
         if (response.ok) {
-            state.groups = data.groups;
-            elements.totalGroups.textContent = data.count;
-            showToast(`Scanned ${data.count} groups`, 'success');
-            renderGroups();
+            showToast('Scan started...', 'info');
+            checkScanStatus();
         } else {
             showToast(data.error || 'Scan failed', 'error');
+            state.isScanning = false;
+            elements.scanGroupsBtn.disabled = false;
+            elements.scanGroupsBtn.textContent = 'Scan Now';
         }
     } catch (error) {
         showToast('Scan failed: ' + error.message, 'error');
-    } finally {
         state.isScanning = false;
         elements.scanGroupsBtn.disabled = false;
         elements.scanGroupsBtn.textContent = 'Scan Now';
     }
 }
 
+function checkScanStatus() {
+    const interval = setInterval(async () => {
+        try {
+            const res = await fetch('/api/dashboard');
+            const data = await res.json();
+            if (!data.is_scanning) {
+                clearInterval(interval);
+                state.isScanning = false;
+                elements.scanGroupsBtn.disabled = false;
+                elements.scanGroupsBtn.textContent = 'Scan Now';
+                elements.totalGroups.textContent = data.total_groups;
+                elements.activeGroups.textContent = data.active_groups;
+                elements.inactiveGroups.textContent = data.inactive_groups;
+                showToast(`Scan complete`, 'success');
+                await loadGroups();
+            }
+        } catch (e) {
+            console.error('Error polling scan status:', e);
+        }
+    }, 2000);
+}
+
 // ==================== Inactivity Filter ====================
 async function applyThreshold() {
+    if (!elements.thresholdDate || !elements.thresholdTime) {
+        showToast('Filter configuration UI is deprecated or updating', 'warning');
+        return;
+    }
     const date = elements.thresholdDate.value;
     const time = elements.thresholdTime.value || '00:00';
     
@@ -579,25 +624,47 @@ async function sendBroadcast() {
         const data = await response.json();
         
         if (response.ok) {
-            const summary = data.summary;
-            showToast(`Sent ${summary.sent} messages, ${summary.failed} failed`, summary.failed > 0 ? 'warning' : 'success');
-            elements.progressFill.style.width = '100%';
-            elements.progressText.textContent = `${summary.sent} / ${summary.total} sent`;
-            elements.broadcastMessage.value = ''; // clear
-            
-            // Refresh groups data and update preview
-            await loadGroups();
-            await loadDashboard();
-            updateBroadcastPreview();
+            showToast('Broadcast started...', 'info');
+            checkBroadcastStatus();
         } else {
             showToast(data.error || 'Broadcast failed', 'error');
+            state.isSending = false;
+            elements.sendBroadcastBtn.disabled = false;
         }
     } catch (error) {
         showToast('Broadcast error: ' + error.message, 'error');
-    } finally {
         state.isSending = false;
         elements.sendBroadcastBtn.disabled = false;
     }
+}
+
+function checkBroadcastStatus() {
+    const interval = setInterval(async () => {
+        try {
+            const res = await fetch('/api/automation/status');
+            const data = await res.json();
+            
+            if (data.results && data.results.total > 0) {
+                const progress = data.results.total > 0 ? (data.results.sent + data.results.failed) / data.results.total : 0;
+                elements.progressFill.style.width = (progress * 100) + '%';
+                elements.progressText.textContent = `${data.results.sent} / ${data.results.total} sent`;
+            }
+            
+            if (!data.is_running) {
+                clearInterval(interval);
+                state.isSending = false;
+                elements.sendBroadcastBtn.disabled = false;
+                const summary = data.results || {};
+                showToast(`Broadcast complete! Sent ${summary.sent || 0}, ${summary.failed || 0} failed`, 'success');
+                elements.broadcastMessage.value = ''; // clear
+                await loadGroups();
+                await loadDashboard();
+                updateBroadcastPreview();
+            }
+        } catch (e) {
+            console.error('Error polling broadcast status:', e);
+        }
+    }, 2000);
 }
 
 async function loadRules() {

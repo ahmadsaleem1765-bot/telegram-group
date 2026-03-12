@@ -155,9 +155,9 @@ class TelegramClientManager:
             raise
         except PhoneCodeInvalidError:
             logger.error("Invalid verification code")
-            return False
+            return None
     
-    async def verify_password(self, password: str) -> str:
+    async def verify_password(self, password: str) -> Optional[str]:
         """Verify two-factor authentication password"""
         try:
             await self._client.sign_in(password=password)

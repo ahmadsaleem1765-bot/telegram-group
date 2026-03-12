@@ -6,7 +6,7 @@ Scans Telegram groups and retrieves metadata including last message timestamps.
 
 import logging
 import asyncio
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Callable
 from dataclasses import dataclass, asdict
 from datetime import datetime
 
@@ -75,7 +75,7 @@ class GroupScanner:
     
     async def scan_all_groups(
         self, 
-        progress_callback: Optional[callable] = None,
+        progress_callback: Optional[Callable] = None,
         max_groups: int = 500
     ) -> List[Group]:
         """
@@ -124,7 +124,7 @@ class GroupScanner:
                         progress_callback(
                             idx + 1, 
                             total_groups, 
-                            group.name if group else "Unknown"
+                            getattr(group, 'name', 'Unknown') if group else "Unknown"
                         )
                     
                     # Small delay to avoid rate limits

@@ -8,7 +8,7 @@ import asyncio
 import logging
 from typing import Optional, Callable, Dict, Any
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 
 logger = logging.getLogger(__name__)
@@ -97,19 +97,22 @@ class Scheduler:
         if not self._schedule:
             return
         
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         
         if self._schedule.schedule_type == ScheduleType.ONCE:
             self._state.next_run = self._schedule.start_time
         
         elif self._schedule.schedule_type == ScheduleType.DAILY:
+            start_hours = self._schedule.start_time.hour if self._schedule.start_time else now.hour
+            start_minutes = self._schedule.start_time.minute if self._schedule.start_time else now.minute
+            
             if self._schedule.start_time and self._schedule.start_time > now:
                 self._state.next_run = self._schedule.start_time
             else:
                 # Schedule for next day at the same time
                 next_time = now.replace(
-                    hour=self._schedule.start_time.hour,
-                    minute=self._schedule.start_time.minute,
+                    hour=start_hours,
+                    minute=start_minutes,
                     second=0,
                     microsecond=0
                 )
@@ -141,7 +144,7 @@ class Scheduler:
                 continue
             
             # Check if it's time to run
-            if self._state.next_run and datetime.now() >= self._state.next_run:
+            if self._state.next_run and datetime.now(timezone.utc) >= self._state.next_run:
                 await self._run_automation()
                 self._calculate_next_run()
             
@@ -155,7 +158,7 @@ class Scheduler:
         """Execute the automation callback"""
         try:
             logger.info("Running scheduled automation...")
-            self._state.last_run = datetime.now()
+            self._state.last_run = datetime.now(timezone.utc)
             
             if self._automation_callback:
                 await self._automation_callback()
