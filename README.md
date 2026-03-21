@@ -1,4 +1,4 @@
-# Telegram Group Messaging Automation
+# Telegram Controller Automation
 
 A production-quality Telegram automation application that identifies inactive Telegram groups based on user-defined date and time thresholds, and sends automated messages to those groups.
 
@@ -53,7 +53,8 @@ project/
 
 ```bash
 # Clone the repository
-cd telegram-group-automation
+git clone https://github.com/hangtagsmanager-debug/telegram-controller.git
+cd telegram-controller
 
 # Create virtual environment
 python -m venv venv

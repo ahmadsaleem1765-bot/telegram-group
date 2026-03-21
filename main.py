@@ -1,5 +1,5 @@
 """
-Telegram Group Messaging Automation - Main Application
+Telegram Controller Automation - Main Application
 
 A Flask-based web application for managing Telegram group automation.
 """

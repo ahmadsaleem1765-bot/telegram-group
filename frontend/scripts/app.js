@@ -1,5 +1,5 @@
 /**
- * Telegram Group Messaging Automation - Frontend Application
+ * Telegram Controller - Frontend Application
  * Apple Human Interface Guidelines-inspired Design
  */
 

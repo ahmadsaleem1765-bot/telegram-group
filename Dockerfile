@@ -1,4 +1,4 @@
-# Telegram Group Messaging Automation
+# Telegram Controller Automation
 # Docker Configuration
 
 # Use Python 3.11 slim image
