@@ -1,3 +1,11 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(cd /c/Users/flylu/OneDrive/Desktop/\"Telegam Group Messaging\")",
+      "Bash(pip install:*)",
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(python:*)"
+    ]
+  },
   "prefersReducedMotion": true
 }

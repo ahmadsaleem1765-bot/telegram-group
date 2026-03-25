@@ -20,20 +20,29 @@ project/
 │   ├── group_scanner/      # Scans groups and retrieves metadata
 │   ├── inactivity_filter/  # Filters groups by inactivity threshold
 │   ├── message_sender/     # Automated message sending
-│   └── scheduler/          # Optional scheduled automation
+│   ├── scheduler/          # Rule-based scheduled automation
+│   ├── content_manager/    # Dynamic ad/poster content management
+│   ├── channel_adapter/    # Unified delivery interface (Telegram, extensible)
+│   ├── ad_scheduler/       # APScheduler daily delivery with idempotency
+│   └── logging_config.py   # Structured JSON logging setup
 ├── frontend/
 │   ├── pages/             # HTML templates
 │   ├── styles/            # CSS stylesheets
 │   └── scripts/           # JavaScript application
 ├── config/               # Configuration management
-├── logs/                 # Application logs
-├── data/                 # Data storage
+├── content/              # Ad content directory (manifest.json + media)
+├── logs/                 # Application logs (app.log, delivery.log)
+├── data/                 # Data storage (groups, rules, delivery ledger)
+├── tests/                # Unit and integration tests (pytest)
+├── docs/                 # Architecture documentation
 ├── main.py               # Flask application entry point
 ├── requirements.txt      # Python dependencies
 ├── Dockerfile            # Docker configuration
 ├── railway.toml          # Railway deployment config
 └── .env.example          # Environment variables template
 ```
+
+For detailed architecture documentation, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Prerequisites
 
@@ -118,13 +127,19 @@ Required environment variables for Railway:
 
 Optional environment variables:
 
-| Variable             | Default | Description                              |
-| -------------------- | ------- | ---------------------------------------- |
-| DEBUG                | false   | Enable debug mode                        |
-| PORT                 | 5000    | Server port                              |
-| DEFAULT_DELAY_MIN    | 10      | Minimum delay between messages (seconds) |
-| DEFAULT_DELAY_MAX    | 30      | Maximum delay between messages (seconds) |
-| MAX_MESSAGES_PER_RUN | 50      | Maximum messages to send per run         |
+| Variable               | Default                    | Description                              |
+| ---------------------- | -------------------------- | ---------------------------------------- |
+| DEBUG                  | false                      | Enable debug mode                        |
+| PORT                   | 5000                       | Server port                              |
+| DEFAULT_DELAY_MIN      | 10                         | Minimum delay between messages (seconds) |
+| DEFAULT_DELAY_MAX      | 30                         | Maximum delay between messages (seconds) |
+| MAX_MESSAGES_PER_RUN   | 50                         | Maximum messages to send per run         |
+| CONTENT_DIR            | content                    | Directory for ad content and manifest    |
+| SCHEDULE_TIME          | 09:00                      | Daily ad delivery time (HH:MM, 24-hour)  |
+| SCHEDULE_TIMEZONE      | UTC                        | Timezone for scheduled delivery          |
+| DELIVERY_LEDGER_PATH   | data/delivery_ledger.json  | Path to idempotency ledger               |
+| DELIVERY_MAX_RETRIES   | 3                          | Max retry attempts for failed deliveries |
+| DELIVERY_INTER_DELAY   | 5.0                        | Seconds between sends to destinations    |
 
 ## Usage Guide
 
@@ -154,19 +169,44 @@ Optional environment variables:
 
 ## API Endpoints
 
-| Endpoint                    | Method | Description                 |
-| --------------------------- | ------ | --------------------------- |
-| `/api/auth/status`          | GET    | Check authentication status |
-| `/api/auth/login`           | POST   | Login with session string   |
-| `/api/auth/logout`          | POST   | Logout                      |
-| `/api/groups/scan`          | POST   | Scan all groups             |
-| `/api/groups`               | GET    | Get all groups              |
-| `/api/filter/set-threshold` | POST   | Set inactivity threshold    |
-| `/api/filter/apply`         | POST   | Apply filter                |
-| `/api/automation/send`      | POST   | Send messages               |
-| `/api/automation/stop`      | POST   | Stop automation             |
-| `/api/dashboard`            | GET    | Get dashboard data          |
-| `/api/logs`                 | GET    | Get activity logs           |
+| Endpoint                        | Method | Description                        |
+| ------------------------------- | ------ | ---------------------------------- |
+| `/api/auth/status`              | GET    | Check authentication status        |
+| `/api/auth/login`               | POST   | Login with session string          |
+| `/api/auth/logout`              | POST   | Logout                             |
+| `/api/groups/scan`              | POST   | Scan all groups                    |
+| `/api/groups`                   | GET    | Get all groups                     |
+| `/api/automation/send`          | POST   | Send messages (broadcast)          |
+| `/api/automation/stop`          | POST   | Stop automation                    |
+| `/api/ads`                      | GET    | List all ad content                |
+| `/api/ads`                      | POST   | Create a new ad                    |
+| `/api/ads/today`                | GET    | Get today's selected ad            |
+| `/api/ads/<id>`                 | PUT    | Update an ad                       |
+| `/api/ads/<id>`                 | DELETE | Delete an ad                       |
+| `/api/ad-scheduler/status`      | GET    | Get ad scheduler status            |
+| `/api/ad-scheduler/start`       | POST   | Start daily ad scheduler           |
+| `/api/ad-scheduler/stop`        | POST   | Stop ad scheduler                  |
+| `/api/ad-scheduler/trigger`     | POST   | Trigger manual ad delivery         |
+| `/api/ad-scheduler/ledger`      | GET    | View delivery records by date      |
+| `/api/dashboard`                | GET    | Get dashboard data                 |
+| `/api/logs`                     | GET    | Get activity logs                  |
+
+### 5. Automated Daily Ad Delivery
+
+1. Add ad content to `content/manifest.json` (text, media path, schedule date)
+2. Place media files (images, documents) in the `content/` directory
+3. Set `SCHEDULE_TIME` and `SCHEDULE_TIMEZONE` in your `.env`
+4. Start the scheduler via `POST /api/ad-scheduler/start`
+5. Ads are delivered daily to all scanned groups
+6. The system prevents duplicate sends if the process restarts mid-day
+7. To change ads without redeploying, edit `content/manifest.json` (hot-swap)
+
+### 6. Running Tests
+
+```bash
+pip install -r requirements.txt
+pytest
+```
 
 ## Safety Features
 
