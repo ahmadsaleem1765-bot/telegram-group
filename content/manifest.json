@@ -1,0 +1,15 @@
+{
+  "ads": [
+    {
+      "id": "sample-01",
+      "title": "Sample Ad",
+      "message": "This is a sample advertisement. Replace this with your actual ad content.\n\nEdit content/manifest.json to manage your ads.",
+      "media_path": null,
+      "media_type": null,
+      "is_active": false,
+      "priority": 0,
+      "schedule_date": null,
+      "tags": ["sample"]
+    }
+  ]
+}

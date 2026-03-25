@@ -4,14 +4,14 @@ Rules Engine Module
 Manages multiple automation rules for inactive groups.
 """
 
-import json
 import logging
-from typing import List, Dict, Any, Optional, Callable, Tuple
+from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 import uuid
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class AutomationRule:
@@ -44,6 +44,7 @@ class AutomationRule:
             created_at=data.get('created_at', datetime.now().isoformat())
         )
 
+
 class RulesEngine:
     """Manages automation rules"""
     def __init__(self):
@@ -66,7 +67,7 @@ class RulesEngine:
         if deleted:
             self.save()
         return deleted
-    
+
     def toggle_rule(self, rule_id: str, is_active: bool) -> Optional[AutomationRule]:
         for rule in self.rules:
             if rule.id == rule_id:
@@ -92,6 +93,7 @@ class RulesEngine:
             logger.info(f"Loaded {len(self.rules)} automation rules from disk")
         except Exception as e:
             logger.error(f"Failed to load rules: {e}")
+
 
 # Global rules engine instance
 rules_engine = RulesEngine()

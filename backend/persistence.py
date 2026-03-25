@@ -9,7 +9,6 @@ import json
 import os
 import logging
 from typing import List, Dict, Any, Optional
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -103,3 +102,24 @@ def load_app_state() -> Dict[str, Any]:
         logger.info("Loaded app state from disk")
         return data
     return {}
+
+
+# ==================== Delivery Ledger Persistence ====================
+
+LEDGER_FILE = os.path.join(DATA_DIR, 'delivery_ledger.json')
+
+
+def save_delivery_ledger(records: List[Dict[str, Any]]):
+    """Save delivery ledger records to disk"""
+    _safe_write_json(LEDGER_FILE, {'records': records})
+    logger.info(f"Saved {len(records)} delivery records to disk")
+
+
+def load_delivery_ledger() -> List[Dict[str, Any]]:
+    """Load delivery ledger records from disk"""
+    data = _safe_read_json(LEDGER_FILE)
+    if data and isinstance(data, dict):
+        records = data.get('records', [])
+        logger.info(f"Loaded {len(records)} delivery records from disk")
+        return records
+    return []
