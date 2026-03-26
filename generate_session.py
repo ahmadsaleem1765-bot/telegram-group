@@ -15,12 +15,22 @@ Requirements:
 
 import os
 import asyncio
+from dotenv import load_dotenv
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError, PhoneCodeInvalidError
+
+# Load .env file
+load_dotenv()
 
 # Configuration - Edit these or set environment variables
 API_ID = os.getenv("API_ID", "")
 API_HASH = os.getenv("API_HASH", "")
+
+# Proxy configuration (set these if Telegram is blocked in your region)
+# Supported types: 'socks5', 'socks4', 'http'
+PROXY_TYPE = os.getenv("PROXY_TYPE", "")   # e.g. socks5
+PROXY_HOST = os.getenv("PROXY_HOST", "")   # e.g. 127.0.0.1
+PROXY_PORT = os.getenv("PROXY_PORT", "")   # e.g. 1080
 
 SESSION_NAME = "telegram_automation"
 
@@ -41,8 +51,20 @@ async def main():
     print("Telegram Session String Generator")
     print("=" * 50)
 
+    # Build proxy settings if configured
+    proxy = None
+    if PROXY_TYPE and PROXY_HOST and PROXY_PORT:
+        import socks
+        proxy_types = {'socks5': socks.SOCKS5, 'socks4': socks.SOCKS4, 'http': socks.HTTP}
+        ptype = proxy_types.get(PROXY_TYPE.lower())
+        if ptype:
+            proxy = (ptype, PROXY_HOST, int(PROXY_PORT))
+            print(f"Using proxy: {PROXY_TYPE}://{PROXY_HOST}:{PROXY_PORT}")
+        else:
+            print(f"WARNING: Unknown proxy type '{PROXY_TYPE}', connecting without proxy")
+
     # Create client
-    client = TelegramClient(SESSION_NAME, int(API_ID), API_HASH)
+    client = TelegramClient(SESSION_NAME, int(API_ID), API_HASH, proxy=proxy)
 
     await client.connect()
 
