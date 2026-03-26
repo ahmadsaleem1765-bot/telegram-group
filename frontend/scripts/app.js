@@ -81,14 +81,30 @@ const elements = {
     twoFaPassword: document.getElementById('twoFaPassword'),
     loginBtn: document.getElementById('loginBtn'),
     
-    // Ads
+    // Ads - Send Ad section
+    adToSend: document.getElementById('adToSend'),
+    adSendTarget: document.getElementById('adSendTarget'),
+    adGroupSelectorContainer: document.getElementById('adGroupSelectorContainer'),
+    adGroupSelector: document.getElementById('adGroupSelector'),
+    adSelectAllGroupsBtn: document.getElementById('adSelectAllGroupsBtn'),
+    adClearGroupsBtn: document.getElementById('adClearGroupsBtn'),
+    adSendPreviewContainer: document.getElementById('adSendPreviewContainer'),
+    adSendPreviewText: document.getElementById('adSendPreviewText'),
+    sendAdNowBtn: document.getElementById('sendAdNowBtn'),
+    stopAdDeliveryBtn: document.getElementById('stopAdDeliveryBtn'),
+    adProgressCard: document.getElementById('adProgressCard'),
+    adProgressFill: document.getElementById('adProgressFill'),
+    adProgressText: document.getElementById('adProgressText'),
+
+    // Ads - Scheduler
     schedulerStatusBadge: document.getElementById('schedulerStatusBadge'),
     schedulerTime: document.getElementById('schedulerTime'),
     schedulerTimezone: document.getElementById('schedulerTimezone'),
     schedulerLastRun: document.getElementById('schedulerLastRun'),
     startSchedulerBtn: document.getElementById('startSchedulerBtn'),
     stopSchedulerBtn: document.getElementById('stopSchedulerBtn'),
-    sendAdNowBtn: document.getElementById('sendAdNowBtn'),
+
+    // Ads - Content management
     newAdBtn: document.getElementById('newAdBtn'),
     adForm: document.getElementById('adForm'),
     adFormTitle: document.getElementById('adFormTitle'),
@@ -96,11 +112,22 @@ const elements = {
     adEditId: document.getElementById('adEditId'),
     adTitle: document.getElementById('adTitle'),
     adMessage: document.getElementById('adMessage'),
+    adMediaFile: document.getElementById('adMediaFile'),
+    adMediaFilename: document.getElementById('adMediaFilename'),
+    adMediaType: document.getElementById('adMediaType'),
+    adMediaPreview: document.getElementById('adMediaPreview'),
+    adMediaPreviewName: document.getElementById('adMediaPreviewName'),
+    adMediaClearBtn: document.getElementById('adMediaClearBtn'),
+    adMediaUploadProgress: document.getElementById('adMediaUploadProgress'),
+    adMediaUploadText: document.getElementById('adMediaUploadText'),
     adScheduleDate: document.getElementById('adScheduleDate'),
     adPriority: document.getElementById('adPriority'),
     adIsActive: document.getElementById('adIsActive'),
     saveAdBtn: document.getElementById('saveAdBtn'),
     adsList: document.getElementById('adsList'),
+
+    // Automation stop
+    stopBroadcastBtn: document.getElementById('stopBroadcastBtn'),
 
     // Toast
     toastContainer: document.getElementById('toastContainer')
@@ -140,6 +167,8 @@ function switchView(viewId) {
     } else if (viewId === 'ads') {
         loadAds();
         loadSchedulerStatus();
+        loadGroups().then(() => populateAdGroupSelector());
+        pollAdDeliveryStatus();
     } else if (viewId === 'logs') {
         loadLogs();
     }
@@ -652,8 +681,9 @@ async function sendBroadcast() {
     try {
         state.isSending = true;
         elements.sendBroadcastBtn.disabled = true;
+        elements.stopBroadcastBtn.style.display = 'inline-block';
         elements.progressCard.style.display = 'block';
-        
+
         const response = await fetch('/api/automation/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -669,11 +699,29 @@ async function sendBroadcast() {
             showToast(data.error || 'Broadcast failed', 'error');
             state.isSending = false;
             elements.sendBroadcastBtn.disabled = false;
+            elements.stopBroadcastBtn.style.display = 'none';
         }
     } catch (error) {
         showToast('Broadcast error: ' + error.message, 'error');
         state.isSending = false;
         elements.sendBroadcastBtn.disabled = false;
+        elements.stopBroadcastBtn.style.display = 'none';
+    }
+}
+
+async function stopBroadcast() {
+    try {
+        await fetch('/api/automation/stop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        showToast('Broadcast stop requested', 'info');
+        elements.stopBroadcastBtn.style.display = 'none';
+        elements.sendBroadcastBtn.disabled = false;
+        state.isSending = false;
+    } catch (e) {
+        showToast('Stop error: ' + e.message, 'error');
     }
 }
 
@@ -693,6 +741,7 @@ function checkBroadcastStatus() {
                 clearInterval(interval);
                 state.isSending = false;
                 elements.sendBroadcastBtn.disabled = false;
+                elements.stopBroadcastBtn.style.display = 'none';
                 const summary = data.results || {};
                 showToast(`Broadcast complete! Sent ${summary.sent || 0}, ${summary.failed || 0} failed`, 'success');
                 elements.broadcastMessage.value = ''; // clear
@@ -794,6 +843,151 @@ window.deleteRule = async function(ruleId) {
 }
 
 // ==================== Ads ====================
+
+// --- Send Ad section ---
+
+function populateAdGroupSelector() {
+    if (!elements.adGroupSelector) return;
+    if (!state.groups || state.groups.length === 0) {
+        elements.adGroupSelector.innerHTML = '<div style="color: #475569; font-size: 0.85rem; padding: 8px;">No groups scanned yet</div>';
+        return;
+    }
+    elements.adGroupSelector.innerHTML = state.groups.map(g => `
+        <label style="display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 6px; cursor: pointer; transition: background 0.15s;"
+               onmouseover="this.style.background='rgba(255,255,255,0.05)'"
+               onmouseout="this.style.background='transparent'">
+            <input type="checkbox" class="ad-group-checkbox" data-id="${g.id}"
+                   style="width: 15px; height: 15px; accent-color: #007bff; flex-shrink: 0;">
+            <span style="color: #e2e8f0; font-size: 0.875rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(g.name)}</span>
+        </label>
+    `).join('');
+    updateAdSendPreview();
+}
+
+function getSelectedGroupIds() {
+    const checkboxes = document.querySelectorAll('.ad-group-checkbox:checked');
+    return Array.from(checkboxes).map(cb => cb.dataset.id);
+}
+
+function updateAdSendPreview() {
+    if (!elements.adSendPreviewContainer) return;
+    const target = elements.adSendTarget.value;
+    let count = 0;
+    if (target === 'all') {
+        count = state.groups.length;
+        elements.adGroupSelectorContainer.style.display = 'none';
+    } else {
+        elements.adGroupSelectorContainer.style.display = 'block';
+        count = getSelectedGroupIds().length;
+    }
+    if (state.groups.length > 0 || target === 'specific') {
+        elements.adSendPreviewContainer.style.display = 'block';
+        elements.adSendPreviewText.textContent = `Ready to send to ${count} group${count !== 1 ? 's' : ''}`;
+    }
+}
+
+let _adDeliveryPollInterval = null;
+
+function pollAdDeliveryStatus() {
+    if (_adDeliveryPollInterval) return; // already polling
+    _adDeliveryPollInterval = setInterval(async () => {
+        try {
+            const res = await fetch('/api/ad-scheduler/status');
+            const data = await res.json();
+            const delivering = data.is_delivering;
+            const progress = data.delivery_progress || {};
+
+            if (delivering) {
+                elements.adProgressCard.style.display = 'block';
+                elements.stopAdDeliveryBtn.style.display = 'inline-block';
+                elements.sendAdNowBtn.disabled = true;
+                if (progress.total > 0) {
+                    const pct = ((progress.sent + progress.failed) / progress.total) * 100;
+                    elements.adProgressFill.style.width = pct + '%';
+                    elements.adProgressText.textContent = `${progress.sent} / ${progress.total} sent`;
+                }
+            } else {
+                elements.stopAdDeliveryBtn.style.display = 'none';
+                elements.sendAdNowBtn.disabled = false;
+                if (progress.total > 0) {
+                    elements.adProgressFill.style.width = '100%';
+                    elements.adProgressText.textContent = `${progress.sent} / ${progress.total} sent`;
+                }
+            }
+        } catch (e) {
+            console.error('Ad delivery status poll error:', e);
+        }
+    }, 2000);
+}
+
+async function sendAdNow() {
+    const adId = elements.adToSend.value;
+    if (!adId) {
+        showToast('Please select an ad to send', 'error');
+        return;
+    }
+
+    const target = elements.adSendTarget.value;
+    let groupIds = null;
+    if (target === 'specific') {
+        groupIds = getSelectedGroupIds();
+        if (groupIds.length === 0) {
+            showToast('Please select at least one group', 'error');
+            return;
+        }
+    }
+
+    try {
+        elements.sendAdNowBtn.disabled = true;
+        elements.sendAdNowBtn.textContent = 'Sending...';
+        elements.adProgressCard.style.display = 'block';
+        elements.adProgressFill.style.width = '0%';
+        elements.adProgressText.textContent = 'Starting...';
+
+        const body = { ad_id: adId };
+        if (groupIds) body.group_ids = groupIds;
+
+        const response = await fetch('/api/ad-scheduler/trigger', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await response.json();
+        if (response.ok) {
+            showToast('Ad delivery started', 'success');
+            elements.stopAdDeliveryBtn.style.display = 'inline-block';
+            pollAdDeliveryStatus();
+        } else {
+            showToast(data.error || 'Failed to trigger delivery', 'error');
+            elements.sendAdNowBtn.disabled = false;
+            elements.adProgressCard.style.display = 'none';
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+        elements.sendAdNowBtn.disabled = false;
+        elements.adProgressCard.style.display = 'none';
+    } finally {
+        elements.sendAdNowBtn.textContent = 'Send Now';
+    }
+}
+
+async function stopAdDelivery() {
+    try {
+        await fetch('/api/ad-delivery/stop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        showToast('Ad delivery stop requested', 'info');
+        elements.stopAdDeliveryBtn.style.display = 'none';
+        elements.sendAdNowBtn.disabled = false;
+    } catch (e) {
+        showToast('Stop error: ' + e.message, 'error');
+    }
+}
+
+// --- Scheduler ---
+
 async function loadSchedulerStatus() {
     try {
         const res = await fetch('/api/ad-scheduler/status');
@@ -865,37 +1059,25 @@ async function stopScheduler() {
     }
 }
 
-async function sendAdNow() {
-    try {
-        elements.sendAdNowBtn.disabled = true;
-        elements.sendAdNowBtn.textContent = 'Sending...';
-        const response = await fetch('/api/ad-scheduler/trigger', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({})
-        });
-        const data = await response.json();
-        if (response.ok) {
-            showToast('Ad delivery started', 'success');
-        } else {
-            showToast(data.error || 'Failed to trigger delivery', 'error');
-        }
-    } catch (e) {
-        showToast('Error: ' + e.message, 'error');
-    } finally {
-        elements.sendAdNowBtn.disabled = false;
-        elements.sendAdNowBtn.textContent = 'Send Now';
-    }
-}
+// --- Ad Content ---
 
 async function loadAds() {
     try {
         const res = await fetch('/api/ads');
         const data = await res.json();
-        renderAds(data.ads || []);
+        const ads = data.ads || [];
+        renderAds(ads);
+        populateAdToSendDropdown(ads);
     } catch (e) {
         console.error('Failed to load ads:', e);
     }
+}
+
+function populateAdToSendDropdown(ads) {
+    if (!elements.adToSend) return;
+    const current = elements.adToSend.value;
+    elements.adToSend.innerHTML = '<option value="">— Select an ad —</option>' +
+        ads.map(ad => `<option value="${ad.id}" ${ad.id === current ? 'selected' : ''}>${escapeHtml(ad.title)}${ad.is_active ? '' : ' (inactive)'}</option>`).join('');
 }
 
 function renderAds(ads) {
@@ -906,12 +1088,14 @@ function renderAds(ads) {
     elements.adsList.innerHTML = ads.map(ad => `
         <div style="background: rgba(255,255,255,0.05); border: 1px solid #333; border-radius: 8px; padding: 15px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: start; gap: 12px;">
             <div style="flex: 1; min-width: 0;">
-                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap;">
                     <span style="font-size: 1rem; font-weight: 600; color: #fff;">${escapeHtml(ad.title)}</span>
                     <span style="font-size: 0.75rem; padding: 2px 8px; border-radius: 20px; background: ${ad.is_active ? 'rgba(16,185,129,0.15)' : 'rgba(100,100,100,0.15)'}; color: ${ad.is_active ? '#10b981' : '#64748b'}; border: 1px solid ${ad.is_active ? 'rgba(16,185,129,0.3)' : 'rgba(100,100,100,0.3)'};">${ad.is_active ? 'Active' : 'Inactive'}</span>
                     ${ad.schedule_date ? `<span style="font-size: 0.75rem; color: #94a3b8;">📅 ${ad.schedule_date}</span>` : ''}
+                    ${ad.media_type ? `<span style="font-size: 0.75rem; color: #a78bfa; background: rgba(167,139,250,0.1); border: 1px solid rgba(167,139,250,0.3); padding: 2px 8px; border-radius: 20px;">${ad.media_type === 'photo' ? '🖼 Photo' : ad.media_type === 'video' ? '🎬 Video' : '📎 File'}</span>` : ''}
                 </div>
-                ${ad.message ? `<div style="color: #94a3b8; font-size: 0.875rem; white-space: pre-wrap; word-break: break-word;">${escapeHtml(ad.message.slice(0, 120))}${ad.message.length > 120 ? '…' : ''}</div>` : '<div style="color: #475569; font-size: 0.8rem; font-style: italic;">No message text</div>'}
+                ${ad.message ? `<div style="color: #94a3b8; font-size: 0.875rem; white-space: pre-wrap; word-break: break-word;">${escapeHtml(ad.message.slice(0, 120))}${ad.message.length > 120 ? '…' : ''}</div>` : '<div style="color: #475569; font-size: 0.8rem; font-style: italic;">No caption</div>'}
+                ${ad.media_path ? `<div style="color: #64748b; font-size: 0.75rem; margin-top: 4px;">📁 ${escapeHtml(ad.media_path)}</div>` : ''}
             </div>
             <div style="display: flex; gap: 8px; flex-shrink: 0;">
                 <button onclick="editAd('${ad.id}')" style="background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); border-radius: 4px; padding: 6px 10px; cursor: pointer; font-size: 0.8rem;">Edit</button>
@@ -919,6 +1103,15 @@ function renderAds(ads) {
             </div>
         </div>
     `).join('');
+}
+
+function clearAdMediaUI() {
+    elements.adMediaFilename.value = '';
+    elements.adMediaType.value = '';
+    elements.adMediaPreview.style.display = 'none';
+    elements.adMediaPreviewName.textContent = '';
+    elements.adMediaFile.value = '';
+    elements.adMediaUploadText.textContent = 'Click to upload photo, video, or file';
 }
 
 function openAdForm(ad = null) {
@@ -929,6 +1122,14 @@ function openAdForm(ad = null) {
     elements.adPriority.value = ad ? (ad.priority || 0) : 0;
     elements.adIsActive.checked = ad ? ad.is_active : true;
     elements.adFormTitle.textContent = ad ? 'Edit Ad' : 'New Ad';
+    clearAdMediaUI();
+    if (ad && ad.media_path) {
+        elements.adMediaFilename.value = ad.media_path;
+        elements.adMediaType.value = ad.media_type || '';
+        elements.adMediaPreviewName.textContent = ad.media_path;
+        elements.adMediaPreview.style.display = 'flex';
+        elements.adMediaUploadText.textContent = 'Click to replace media';
+    }
     elements.adForm.style.display = 'block';
 }
 
@@ -958,6 +1159,32 @@ window.deleteAd = async function(adId) {
     }
 };
 
+async function uploadAdMedia(file) {
+    elements.adMediaUploadProgress.style.display = 'block';
+    elements.adMediaUploadProgress.textContent = 'Uploading...';
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+        const res = await fetch('/api/ads/upload-media', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (res.ok) {
+            elements.adMediaFilename.value = data.filename;
+            elements.adMediaType.value = data.media_type;
+            elements.adMediaPreviewName.textContent = data.filename;
+            elements.adMediaPreview.style.display = 'flex';
+            elements.adMediaUploadText.textContent = 'Click to replace media';
+            elements.adMediaUploadProgress.style.display = 'none';
+            showToast('Media uploaded: ' + data.filename, 'success');
+        } else {
+            elements.adMediaUploadProgress.style.display = 'none';
+            showToast(data.error || 'Upload failed', 'error');
+        }
+    } catch (e) {
+        elements.adMediaUploadProgress.style.display = 'none';
+        showToast('Upload error: ' + e.message, 'error');
+    }
+}
+
 async function saveAd() {
     const title = elements.adTitle.value.trim();
     if (!title) {
@@ -970,7 +1197,9 @@ async function saveAd() {
         message: elements.adMessage.value.trim(),
         schedule_date: elements.adScheduleDate.value || null,
         priority: parseInt(elements.adPriority.value) || 0,
-        is_active: elements.adIsActive.checked
+        is_active: elements.adIsActive.checked,
+        media_path: elements.adMediaFilename.value || null,
+        media_type: elements.adMediaType.value || null,
     };
 
     const editId = elements.adEditId.value;
@@ -1099,13 +1328,39 @@ function initEventListeners() {
     if (elements.cancelRuleBtn) elements.cancelRuleBtn.addEventListener('click', () => { elements.addRuleForm.style.display = 'none'; });
     if (elements.saveRuleBtn) elements.saveRuleBtn.addEventListener('click', saveRule);
     
-    // Ads
+    // Automation stop
+    if (elements.stopBroadcastBtn) elements.stopBroadcastBtn.addEventListener('click', stopBroadcast);
+
+    // Ads - Send Ad
+    if (elements.adSendTarget) elements.adSendTarget.addEventListener('change', updateAdSendPreview);
+    if (elements.adGroupSelector) elements.adGroupSelector.addEventListener('change', updateAdSendPreview);
+    if (elements.adSelectAllGroupsBtn) elements.adSelectAllGroupsBtn.addEventListener('click', () => {
+        document.querySelectorAll('.ad-group-checkbox').forEach(cb => { cb.checked = true; });
+        updateAdSendPreview();
+    });
+    if (elements.adClearGroupsBtn) elements.adClearGroupsBtn.addEventListener('click', () => {
+        document.querySelectorAll('.ad-group-checkbox').forEach(cb => { cb.checked = false; });
+        updateAdSendPreview();
+    });
+    if (elements.sendAdNowBtn) elements.sendAdNowBtn.addEventListener('click', sendAdNow);
+    if (elements.stopAdDeliveryBtn) elements.stopAdDeliveryBtn.addEventListener('click', stopAdDelivery);
+
+    // Ads - Scheduler
     if (elements.startSchedulerBtn) elements.startSchedulerBtn.addEventListener('click', startScheduler);
     if (elements.stopSchedulerBtn) elements.stopSchedulerBtn.addEventListener('click', stopScheduler);
-    if (elements.sendAdNowBtn) elements.sendAdNowBtn.addEventListener('click', sendAdNow);
+
+    // Ads - Content
     if (elements.newAdBtn) elements.newAdBtn.addEventListener('click', () => openAdForm(null));
     if (elements.cancelAdBtn) elements.cancelAdBtn.addEventListener('click', () => { elements.adForm.style.display = 'none'; });
     if (elements.saveAdBtn) elements.saveAdBtn.addEventListener('click', saveAd);
+    if (elements.adMediaFile) elements.adMediaFile.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) uploadAdMedia(file);
+    });
+    if (elements.adMediaClearBtn) elements.adMediaClearBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        clearAdMediaUI();
+    });
 
     // Logs
     elements.refreshLogsBtn.addEventListener('click', loadLogs);

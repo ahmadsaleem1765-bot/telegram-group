@@ -185,8 +185,11 @@ class AdScheduler:
         self._destinations: List[Destination] = []
         self._scheduler: Optional[AsyncIOScheduler] = None
         self._is_running = False
+        self._is_delivering = False
+        self._stop_delivery_requested = False
         self._last_run: Optional[datetime] = None
         self._log_callback: Optional[Callable[[str], Any]] = None
+        self._delivery_progress: Dict[str, Any] = {"sent": 0, "failed": 0, "total": 0}
 
     @property
     def is_running(self) -> bool:
@@ -258,29 +261,50 @@ class AdScheduler:
         self._is_running = False
         self._log("Ad scheduler stopped")
 
-    async def run_daily_delivery(self) -> List[DeliveryResult]:
+    def request_stop_delivery(self) -> None:
+        """Request an in-progress delivery to stop."""
+        self._stop_delivery_requested = True
+        self._log("Ad delivery stop requested")
+
+    async def run_daily_delivery(
+        self,
+        ad_id_override: Optional[str] = None,
+        destinations_override: Optional[List[Destination]] = None,
+    ) -> List[DeliveryResult]:
         """Execute the daily delivery cycle.
 
-        1. Select today's ad from ContentManager
+        1. Select today's ad from ContentManager (or use ad_id_override)
         2. For each destination, check idempotency ledger
         3. Deliver via DeliveryEngine (with retry)
         4. Record results in ledger
         """
         today = date.today()
         self._last_run = datetime.now(timezone.utc)
+        self._is_delivering = True
+        self._stop_delivery_requested = False
 
-        ad = self._content_manager.get_ad_for_date(today)
+        targets = destinations_override if destinations_override is not None else self._destinations
+
+        if ad_id_override:
+            all_ads = self._content_manager.get_all_ads()
+            ad = next((a for a in all_ads if a.id == ad_id_override), None)
+        else:
+            ad = self._content_manager.get_ad_for_date(today)
+
         if not ad:
             self._log("No active ad content for today, skipping delivery")
+            self._is_delivering = False
             return []
 
-        if not self._destinations:
+        if not targets:
             self._log("No destinations configured, skipping delivery")
+            self._is_delivering = False
             return []
 
+        self._delivery_progress = {"sent": 0, "failed": 0, "total": len(targets)}
         self._log(
-            f"Starting daily ad delivery: '{ad.title}' to "
-            f"{len(self._destinations)} destinations"
+            f"Starting ad delivery: '{ad.title}' to "
+            f"{len(targets)} destinations"
         )
 
         # Resolve media
@@ -288,9 +312,13 @@ class AdScheduler:
         media_type = ad.media_type if media_path else None
 
         results: List[DeliveryResult] = []
-        for dest in self._destinations:
-            # Idempotency check
-            if self._ledger.was_delivered(
+        for dest in targets:
+            if self._stop_delivery_requested:
+                self._log("Delivery stopped by user request")
+                break
+
+            # Idempotency check (skip for manual/override sends)
+            if not ad_id_override and self._ledger.was_delivered(
                 ad.content_hash, dest.id, today
             ):
                 self._log(
@@ -317,6 +345,11 @@ class AdScheduler:
             )
             results.append(result)
 
+            if result.status == DeliveryStatus.SUCCESS:
+                self._delivery_progress["sent"] += 1
+            else:
+                self._delivery_progress["failed"] += 1
+
             # Record in ledger
             self._ledger.record_delivery(
                 content_id=ad.id,
@@ -336,15 +369,17 @@ class AdScheduler:
             1 for r in results if r.status == DeliveryStatus.FAILED
         )
         self._log(
-            f"Daily delivery complete: {success} sent, "
+            f"Ad delivery complete: {success} sent, "
             f"{skipped} skipped, {failed} failed"
         )
+        self._is_delivering = False
         return results
 
     def get_status(self) -> Dict[str, Any]:
         """Get scheduler status for API responses."""
         return {
             "is_running": self._is_running,
+            "is_delivering": self._is_delivering,
             "schedule_time": (
                 f"{self._schedule_hour:02d}:{self._schedule_minute:02d}"
             ),
@@ -353,6 +388,7 @@ class AdScheduler:
                 self._last_run.isoformat() if self._last_run else None
             ),
             "destinations_count": len(self._destinations),
+            "delivery_progress": self._delivery_progress,
         }
 
 

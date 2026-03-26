@@ -84,8 +84,11 @@ def rate_limit(max_requests=5, window=60):
 def csrf_protect():
     """Simple CSRF protection verifying standard JSON structure or origin"""
     if request.method == "POST":
+        # Allow multipart uploads for media upload endpoint
+        if request.path == '/api/ads/upload-media':
+            return
         # Check standard headers for JSON API to prevent basic CSRF
-        if request.content_type != 'application/json':
+        if not request.content_type or not request.content_type.startswith('application/json'):
             return jsonify({'error': 'Unsupported Media Type, expected application/json'}), 415
 
 
@@ -897,6 +900,51 @@ def delete_ad(ad_id):
     return jsonify({'error': 'Ad not found'}), 404
 
 
+@app.route('/api/ads/upload-media', methods=['POST'])
+def upload_ad_media():
+    """Upload a media file for use in an ad"""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'error': 'Empty filename'}), 400
+
+    # Sanitize filename
+    import uuid as _uuid
+    from werkzeug.utils import secure_filename
+    ext = os.path.splitext(file.filename)[1].lower()
+    allowed_exts = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.mov', '.avi', '.mkv', '.webm', '.pdf', '.zip', '.mp3', '.ogg'}
+    if ext not in allowed_exts:
+        return jsonify({'error': f'File type {ext} not allowed'}), 400
+
+    safe_name = secure_filename(file.filename)
+    if not safe_name:
+        safe_name = f"media_{_uuid.uuid4().hex[:8]}{ext}"
+
+    save_path = os.path.join(config.content_dir, safe_name)
+    # Avoid overwriting existing files
+    if os.path.exists(save_path):
+        base, extension = os.path.splitext(safe_name)
+        safe_name = f"{base}_{_uuid.uuid4().hex[:4]}{extension}"
+        save_path = os.path.join(config.content_dir, safe_name)
+
+    file.save(save_path)
+
+    # Detect media type
+    image_exts = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
+    video_exts = {'.mp4', '.mov', '.avi', '.mkv', '.webm'}
+    if ext in image_exts:
+        media_type = 'photo'
+    elif ext in video_exts:
+        media_type = 'video'
+    else:
+        media_type = 'document'
+
+    app_state.add_log(f"Uploaded media: {safe_name} ({media_type})")
+    return jsonify({'success': True, 'filename': safe_name, 'media_type': media_type})
+
+
 # ==================== Ad Scheduler API ====================
 
 @app.route('/api/ad-scheduler/status', methods=['GET'])
@@ -947,32 +995,53 @@ def stop_ad_scheduler():
 
 @app.route('/api/ad-scheduler/trigger', methods=['POST'])
 def trigger_ad_delivery():
-    """Manually trigger ad delivery now (for testing)"""
+    """Manually trigger ad delivery now"""
     if not client_manager.is_authenticated:
         return jsonify({'error': 'Not authenticated'}), 401
 
-    # Ensure destinations are set
-    destinations = [
-        Destination(id=str(g.id), name=g.name, type="telegram")
-        for g in app_state.groups
-    ]
-    if not destinations:
+    data = request.get_json() or {}
+    group_ids = data.get('group_ids')  # Optional list of specific group IDs
+    ad_id = data.get('ad_id')  # Optional specific ad ID
+
+    # Build destinations
+    if group_ids:
+        groups = [g for g in app_state.groups if str(g.id) in [str(gid) for gid in group_ids]]
+    else:
+        groups = app_state.groups
+
+    if not groups:
         return jsonify({'error': 'No groups available'}), 400
 
+    destinations = [
+        Destination(id=str(g.id), name=g.name, type="telegram")
+        for g in groups
+    ]
+
     ad_scheduler.set_destinations(destinations)
-    app_state.add_log("Manual ad delivery triggered")
+    app_state.add_log(f"Ad delivery triggered: {len(destinations)} groups" + (f", ad={ad_id}" if ad_id else ""))
 
     async def _run_delivery():
         try:
-            results = await ad_scheduler.run_daily_delivery()
+            results = await ad_scheduler.run_daily_delivery(
+                ad_id_override=ad_id,
+                destinations_override=destinations,
+            )
             success = sum(1 for r in results if r.status == DeliveryStatus.SUCCESS)
             failed = sum(1 for r in results if r.status == DeliveryStatus.FAILED)
-            app_state.add_log(f"Manual delivery complete: {success} sent, {failed} failed")
+            app_state.add_log(f"Ad delivery complete: {success} sent, {failed} failed")
         except Exception as e:
-            app_state.add_log(f"Manual delivery error: {e}", "error")
+            app_state.add_log(f"Ad delivery error: {e}", "error")
 
     asyncio.run_coroutine_threadsafe(_run_delivery(), _global_loop)
     return jsonify({'success': True, 'message': 'Delivery triggered in background'})
+
+
+@app.route('/api/ad-delivery/stop', methods=['POST'])
+def stop_ad_delivery():
+    """Stop an in-progress ad delivery"""
+    ad_scheduler.request_stop_delivery()
+    app_state.add_log("Ad delivery stop requested")
+    return jsonify({'success': True})
 
 
 @app.route('/api/ad-scheduler/ledger', methods=['GET'])
