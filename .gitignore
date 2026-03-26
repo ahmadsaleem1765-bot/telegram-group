@@ -45,6 +45,9 @@ logs/*.log
 data/*.session
 data/*.json
 
+# Telethon session files (contain auth tokens - never commit)
+*.session
+
 # OS
 .DS_Store
 Thumbs.db

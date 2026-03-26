@@ -18,6 +18,7 @@ import asyncio
 import traceback
 from dotenv import load_dotenv
 from telethon import TelegramClient
+from telethon.sessions import StringSession
 from telethon.errors import SessionPasswordNeededError, PhoneCodeInvalidError
 
 # Load .env file
@@ -35,7 +36,7 @@ PROXY_TYPE = os.getenv("PROXY_TYPE", "")   # e.g. socks5
 PROXY_HOST = os.getenv("PROXY_HOST", "")   # e.g. 127.0.0.1
 PROXY_PORT = os.getenv("PROXY_PORT", "")   # e.g. 1080
 
-SESSION_NAME = "telegram_automation"
+# No longer using file-based sessions - StringSession generates a portable string
 
 
 async def main():
@@ -77,7 +78,7 @@ async def main():
         print("      No proxy configured (set PROXY_TYPE/HOST/PORT in .env if needed)")
 
     print(f"\n[4/8] Creating Telegram client...")
-    client = TelegramClient(SESSION_NAME, int(API_ID), API_HASH, proxy=proxy)
+    client = TelegramClient(StringSession(), int(API_ID), API_HASH, proxy=proxy)
     print("      Client created OK")
 
     print(f"\n[5/8] Connecting to Telegram servers...")
