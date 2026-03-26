@@ -15,6 +15,7 @@ from telethon.errors import (
     SessionPasswordNeededError,
     PhoneCodeInvalidError,
     ApiIdInvalidError,
+    FloodWaitError,
 )
 from telethon.tl.types import Chat, Channel, Dialog
 
@@ -125,7 +126,17 @@ class TelegramClientManager:
         )
 
         await self._client.connect()
-        sent_code = await self._client.send_code_request(phone)
+        try:
+            sent_code = await self._client.send_code_request(phone)
+        except FloodWaitError as e:
+            await self._client.disconnect()
+            minutes, seconds = divmod(e.seconds, 60)
+            hours, minutes = divmod(minutes, 60)
+            wait_str = f"{hours}h {minutes}m {seconds}s" if hours else f"{minutes}m {seconds}s"
+            raise ValueError(
+                f"Too many login attempts. Telegram requires a wait of {wait_str} "
+                f"({e.seconds} seconds) before sending another code to this number."
+            )
 
         code_type = type(sent_code.type).__name__  # e.g. SentCodeTypeApp, SentCodeTypeSms
         return sent_code.phone_code_hash, code_type

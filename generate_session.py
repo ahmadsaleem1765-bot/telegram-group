@@ -19,7 +19,7 @@ import traceback
 from dotenv import load_dotenv
 from telethon import TelegramClient
 from telethon.sessions import StringSession
-from telethon.errors import SessionPasswordNeededError, PhoneCodeInvalidError
+from telethon.errors import SessionPasswordNeededError, PhoneCodeInvalidError, FloodWaitError
 
 # Load .env file
 print("[1/8] Loading .env file...")
@@ -134,6 +134,16 @@ async def main():
             print(f"      >>> Unknown delivery method. Full type info: {sent_code.type}")
 
         print(f"\n      Full sent_code info: {sent_code}")
+    except FloodWaitError as e:
+        minutes, seconds = divmod(e.seconds, 60)
+        hours, minutes = divmod(minutes, 60)
+        wait_str = f"{hours}h {minutes}m {seconds}s" if hours else f"{minutes}m {seconds}s"
+        print(f"\nERROR: Too many login attempts.")
+        print(f"Telegram requires you to wait {wait_str} ({e.seconds} seconds) before trying again.")
+        print("This is a Telegram server-side limit — there is no workaround.")
+        print("Please wait and then run this script again.")
+        await client.disconnect()
+        return
     except Exception as e:
         print(f"\nERROR sending code: {e}")
         traceback.print_exc()
