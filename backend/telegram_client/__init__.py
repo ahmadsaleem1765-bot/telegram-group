@@ -132,6 +132,7 @@ class TelegramClientManager:
     async def verify_code(self, phone: str, code: str, phone_code_hash: str) -> Optional[str]:
         """Verify the SMS code"""
         try:
+            phone = ''.join(filter(str.isdigit, phone))
             await self._client.sign_in(phone, code, phone_code_hash=phone_code_hash)
             me = await self._client.get_me()
             self._user = TelegramUser(
