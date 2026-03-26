@@ -116,14 +116,30 @@ async def main():
     print(f"\n[7/8] Sending verification code to {phone}...")
     try:
         sent_code = await client.send_code_request(phone)
-        print(f"      Code sent! Check your Telegram app (not SMS) for a message from 'Telegram'")
+
+        # Show exactly where Telegram sent the code
+        code_type = type(sent_code.type).__name__
+        print(f"\n      >>> Code type received: {code_type}")
+        if "App" in code_type:
+            print("      >>> WHERE TO LOOK: Open Telegram app → find chat named 'Telegram' (official, blue checkmark)")
+            print("      >>> The code is a message inside that chat")
+        elif "Sms" in code_type:
+            print("      >>> WHERE TO LOOK: Check your SMS/text messages on your phone")
+        elif "Call" in code_type:
+            print("      >>> WHERE TO LOOK: Answer your phone — Telegram will call you with the code")
+        elif "FlashCall" in code_type:
+            print("      >>> WHERE TO LOOK: Telegram will call you and hang up — the code is the last digits of the number")
+        else:
+            print(f"      >>> Unknown delivery method. Full type info: {sent_code.type}")
+
+        print(f"\n      Full sent_code info: {sent_code}")
     except Exception as e:
         print(f"\nERROR sending code: {e}")
         traceback.print_exc()
         await client.disconnect()
         return
 
-    code = input("\nEnter the verification code from the Telegram app: ")
+    code = input("\nEnter the verification code: ")
 
     print(f"\n[8/8] Verifying code...")
     try:

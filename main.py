@@ -488,10 +488,11 @@ def auth_request_code():
     app_state.add_log(f"Requesting SMS code for {phone}...")
 
     try:
-        phone_code_hash = run_async(client_manager.start_with_phone(phone))
+        phone_code_hash, code_type = run_async(client_manager.start_with_phone(phone))
         return jsonify({
             'success': True,
-            'phone_code_hash': phone_code_hash
+            'phone_code_hash': phone_code_hash,
+            'code_type': code_type
         })
     except Exception as e:
         app_state.add_log(f"Failed to request code: {str(e)}", "error")

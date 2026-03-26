@@ -251,7 +251,22 @@ async function requestSmsCode() {
             loginState.phoneCodeHash = data.phone_code_hash;
             loginState.phone = phone;
             loginState.step = 2;
-            
+
+            // Show where to find the code based on delivery method
+            const codeType = data.code_type || '';
+            const msgEl = document.getElementById('codeDeliveryMsg');
+            if (msgEl) {
+                if (codeType.includes('App')) {
+                    msgEl.innerHTML = '📱 <strong>Check your Telegram app</strong> — open Telegram and look for a message from the official <em>Telegram</em> account (blue checkmark). Enter the code below.';
+                } else if (codeType.includes('Sms')) {
+                    msgEl.innerHTML = '💬 <strong>Check your SMS messages</strong> — Telegram sent a text to your phone number. Enter the code below.';
+                } else if (codeType.includes('Call') || codeType.includes('Flash')) {
+                    msgEl.innerHTML = '📞 <strong>Answer your phone</strong> — Telegram will call you with the verification code. Enter the code below.';
+                } else {
+                    msgEl.textContent = 'A verification code was sent. Please enter it below.';
+                }
+            }
+
             elements.loginStep1.style.display = 'none';
             elements.loginStep2.style.display = 'block';
             elements.loginModalTitle.textContent = 'Verification Code';

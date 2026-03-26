@@ -127,7 +127,8 @@ class TelegramClientManager:
         await self._client.connect()
         sent_code = await self._client.send_code_request(phone)
 
-        return sent_code.phone_code_hash
+        code_type = type(sent_code.type).__name__  # e.g. SentCodeTypeApp, SentCodeTypeSms
+        return sent_code.phone_code_hash, code_type
 
     async def verify_code(self, phone: str, code: str, phone_code_hash: str) -> Optional[str]:
         """Verify the SMS code"""
