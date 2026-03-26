@@ -391,14 +391,18 @@
                         </div>
                     </div>
 
-                    <!-- Scheduled Delivery -->
+                    <!-- Ad Automation -->
                     <div class="card full-width">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                            <h2 class="card-title" style="margin: 0; font-size: 1.25rem;">Scheduled Delivery</h2>
-                            <span id="schedulerStatusBadge" class="status-badge scheduler-stopped">Stopped</span>
+                            <h2 class="card-title" style="margin: 0; font-size: 1.25rem;">Ad Automation</h2>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <span id="schedulerStatusBadge" class="status-badge scheduler-stopped">Stopped</span>
+                                <button id="newAdRuleBtn" style="background: transparent; border: none; font-size: 1.5rem; color: #007bff; cursor: pointer;">+</button>
+                            </div>
                         </div>
 
-                        <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px;">
+                        <!-- Schedule time (shared for all rules) -->
+                        <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px;">
                             <div style="flex: 1; min-width: 140px;">
                                 <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 6px;">Daily Time</label>
                                 <input type="time" id="schedulerTime" class="input" value="09:00" style="width: 100%; background: #1f1f22; border: 1px solid #333; border-radius: 8px; color: #fff; padding: 10px;">
@@ -409,12 +413,43 @@
                             </div>
                         </div>
 
-                        <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 16px;" id="schedulerLastRun">Last run: Never</div>
+                        <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 12px;" id="schedulerLastRun">Last run: Never</div>
 
-                        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                            <button class="btn btn-primary btn-large" id="startSchedulerBtn" style="flex: 1; background: #007bff; border-radius: 8px;">Start Scheduler</button>
-                            <button class="btn btn-secondary" id="stopSchedulerBtn" style="flex: 1;" disabled>Stop Scheduler</button>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
+                            <button class="btn btn-primary btn-large" id="startSchedulerBtn" style="flex: 1; background: #007bff; border-radius: 8px;">Start Automation</button>
+                            <button class="btn btn-secondary" id="stopSchedulerBtn" style="flex: 1;" disabled>Stop Automation</button>
                         </div>
+
+                        <!-- Add Rule Form (hidden by default) -->
+                        <div id="adRuleForm" style="display: none; border-top: 1px solid #333; padding-top: 20px; margin-bottom: 20px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;">NEW RULE</label>
+                                <button id="cancelAdRuleBtn" style="background: transparent; border: 1px solid #555; color: #fff; cursor: pointer; border-radius: 4px; padding: 4px 8px;">✕</button>
+                            </div>
+
+                            <div class="form-group" style="margin-bottom: 12px;">
+                                <label style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 4px; display: block;">Ad to send</label>
+                                <select id="ruleAdSelect" class="input" style="width: 100%; padding: 12px; background: #1f1f22; border: 1px solid #333; border-radius: 8px; color: #fff;">
+                                    <option value="">— Select an ad —</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group" style="margin-bottom: 16px;">
+                                <label style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 4px; display: block;">Send to groups</label>
+                                <div id="ruleGroupSelector" style="background: #1f1f22; border: 1px solid #333; border-radius: 8px; max-height: 200px; overflow-y: auto; padding: 8px;">
+                                    <div style="color: #475569; font-size: 0.85rem; padding: 8px;">No groups scanned yet</div>
+                                </div>
+                                <div style="margin-top: 6px; display: flex; gap: 8px;">
+                                    <button id="ruleSelectAllGroupsBtn" style="font-size: 0.75rem; background: transparent; border: 1px solid #444; color: #94a3b8; border-radius: 4px; padding: 3px 8px; cursor: pointer;">Select All</button>
+                                    <button id="ruleClearGroupsBtn" style="font-size: 0.75rem; background: transparent; border: 1px solid #444; color: #94a3b8; border-radius: 4px; padding: 3px 8px; cursor: pointer;">Clear</button>
+                                </div>
+                            </div>
+
+                            <button class="btn btn-primary btn-large" id="saveAdRuleBtn" style="width: 100%; background: #007bff; border-radius: 8px;">Save Rule</button>
+                        </div>
+
+                        <!-- Rules List -->
+                        <div id="adRulesList" style="color: #94a3b8; font-style: italic;">No automation rules yet. Click + to add one.</div>
                     </div>
 
                     <!-- Ad Content -->

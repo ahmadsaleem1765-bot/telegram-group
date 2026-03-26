@@ -104,6 +104,17 @@ const elements = {
     startSchedulerBtn: document.getElementById('startSchedulerBtn'),
     stopSchedulerBtn: document.getElementById('stopSchedulerBtn'),
 
+    // Ads - Automation Rules
+    newAdRuleBtn: document.getElementById('newAdRuleBtn'),
+    adRuleForm: document.getElementById('adRuleForm'),
+    cancelAdRuleBtn: document.getElementById('cancelAdRuleBtn'),
+    ruleAdSelect: document.getElementById('ruleAdSelect'),
+    ruleGroupSelector: document.getElementById('ruleGroupSelector'),
+    ruleSelectAllGroupsBtn: document.getElementById('ruleSelectAllGroupsBtn'),
+    ruleClearGroupsBtn: document.getElementById('ruleClearGroupsBtn'),
+    saveAdRuleBtn: document.getElementById('saveAdRuleBtn'),
+    adRulesList: document.getElementById('adRulesList'),
+
     // Ads - Content management
     newAdBtn: document.getElementById('newAdBtn'),
     adForm: document.getElementById('adForm'),
@@ -167,7 +178,11 @@ function switchView(viewId) {
     } else if (viewId === 'ads') {
         loadAds();
         loadSchedulerStatus();
-        loadGroups().then(() => populateAdGroupSelector());
+        loadAdRules();
+        loadGroups().then(() => {
+            populateAdGroupSelector();
+            populateRuleGroupSelector();
+        });
         pollAdDeliveryStatus();
     } else if (viewId === 'logs') {
         loadLogs();
@@ -1058,6 +1073,116 @@ async function stopScheduler() {
     }
 }
 
+// --- Ad Automation Rules ---
+
+async function loadAdRules() {
+    try {
+        const res = await fetch('/api/ad-rules');
+        const data = await res.json();
+        renderAdRules(data.rules || []);
+    } catch (e) {
+        console.error('Failed to load ad rules:', e);
+    }
+}
+
+function renderAdRules(rules) {
+    if (!elements.adRulesList) return;
+    if (!rules || rules.length === 0) {
+        elements.adRulesList.innerHTML = '<div style="color: #94a3b8; font-style: italic;">No automation rules yet. Click + to add one.</div>';
+        return;
+    }
+    elements.adRulesList.innerHTML = rules.map(rule => `
+        <div style="background: rgba(255,255,255,0.05); border: 1px solid #333; border-radius: 8px; padding: 15px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: start; gap: 12px;">
+            <div style="flex: 1; min-width: 0;">
+                <div style="font-size: 1rem; font-weight: 600; color: #fff; margin-bottom: 5px;">
+                    ${escapeHtml(rule.ad_title)}
+                </div>
+                <div style="color: #94a3b8; font-size: 0.875rem;">
+                    → ${rule.group_names.length === 0
+                        ? '<span style="color:#475569;">No groups</span>'
+                        : rule.group_names.map(n => escapeHtml(n)).join(', ')}
+                </div>
+            </div>
+            <button onclick="deleteAdRule('${rule.id}')" style="background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); border-radius: 4px; padding: 6px 12px; cursor: pointer; flex-shrink: 0;">Delete</button>
+        </div>
+    `).join('');
+}
+
+function populateRuleAdSelect(ads) {
+    if (!elements.ruleAdSelect) return;
+    const current = elements.ruleAdSelect.value;
+    elements.ruleAdSelect.innerHTML = '<option value="">— Select an ad —</option>' +
+        ads.filter(a => a.is_active).map(a =>
+            `<option value="${a.id}" ${a.id === current ? 'selected' : ''}>${escapeHtml(a.title)}</option>`
+        ).join('');
+}
+
+function populateRuleGroupSelector() {
+    if (!elements.ruleGroupSelector) return;
+    if (!state.groups || state.groups.length === 0) {
+        elements.ruleGroupSelector.innerHTML = '<div style="color: #475569; font-size: 0.85rem; padding: 8px;">No groups scanned yet</div>';
+        return;
+    }
+    elements.ruleGroupSelector.innerHTML = state.groups.map(g => `
+        <label style="display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 6px; cursor: pointer; transition: background 0.15s;"
+               onmouseover="this.style.background='rgba(255,255,255,0.05)'"
+               onmouseout="this.style.background='transparent'">
+            <input type="checkbox" class="rule-group-checkbox" value="${g.id}" style="accent-color: #007bff;">
+            <span style="color: #f1f5f9; font-size: 0.9rem;">${escapeHtml(g.name)}</span>
+        </label>
+    `).join('');
+}
+
+async function saveAdRule() {
+    const adId = elements.ruleAdSelect ? elements.ruleAdSelect.value : '';
+    const groupIds = Array.from(document.querySelectorAll('.rule-group-checkbox:checked')).map(cb => cb.value);
+    if (!adId) {
+        showToast('Please select an ad', 'error');
+        return;
+    }
+    if (groupIds.length === 0) {
+        showToast('Please select at least one group', 'error');
+        return;
+    }
+    try {
+        elements.saveAdRuleBtn.disabled = true;
+        const res = await fetch('/api/ad-rules', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ad_id: adId, group_ids: groupIds })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showToast('Rule saved', 'success');
+            elements.ruleAdSelect.value = '';
+            document.querySelectorAll('.rule-group-checkbox').forEach(cb => { cb.checked = false; });
+            elements.adRuleForm.style.display = 'none';
+            loadAdRules();
+        } else {
+            showToast(data.error || 'Failed to save rule', 'error');
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    } finally {
+        if (elements.saveAdRuleBtn) elements.saveAdRuleBtn.disabled = false;
+    }
+}
+
+window.deleteAdRule = async function(ruleId) {
+    if (!confirm('Delete this rule?')) return;
+    try {
+        const res = await fetch('/api/ad-rules/' + ruleId, { method: 'DELETE' });
+        if (res.ok) {
+            showToast('Rule deleted', 'success');
+            loadAdRules();
+        } else {
+            showToast('Failed to delete rule', 'error');
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    }
+};
+
 // --- Ad Content ---
 
 async function loadAds() {
@@ -1067,6 +1192,7 @@ async function loadAds() {
         const ads = data.ads || [];
         renderAds(ads);
         populateAdToSendDropdown(ads);
+        populateRuleAdSelect(ads);
     } catch (e) {
         console.error('Failed to load ads:', e);
     }
@@ -1347,6 +1473,20 @@ function initEventListeners() {
     // Ads - Scheduler
     if (elements.startSchedulerBtn) elements.startSchedulerBtn.addEventListener('click', startScheduler);
     if (elements.stopSchedulerBtn) elements.stopSchedulerBtn.addEventListener('click', stopScheduler);
+
+    // Ads - Automation Rules
+    if (elements.newAdRuleBtn) elements.newAdRuleBtn.addEventListener('click', () => {
+        populateRuleGroupSelector();
+        elements.adRuleForm.style.display = 'block';
+    });
+    if (elements.cancelAdRuleBtn) elements.cancelAdRuleBtn.addEventListener('click', () => { elements.adRuleForm.style.display = 'none'; });
+    if (elements.saveAdRuleBtn) elements.saveAdRuleBtn.addEventListener('click', saveAdRule);
+    if (elements.ruleSelectAllGroupsBtn) elements.ruleSelectAllGroupsBtn.addEventListener('click', () => {
+        document.querySelectorAll('.rule-group-checkbox').forEach(cb => { cb.checked = true; });
+    });
+    if (elements.ruleClearGroupsBtn) elements.ruleClearGroupsBtn.addEventListener('click', () => {
+        document.querySelectorAll('.rule-group-checkbox').forEach(cb => { cb.checked = false; });
+    });
 
     // Ads - Content
     if (elements.newAdBtn) elements.newAdBtn.addEventListener('click', () => openAdForm(null));

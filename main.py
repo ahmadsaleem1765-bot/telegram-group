@@ -179,6 +179,63 @@ app_state_lock = threading.Lock()
 inactivity_filter: Optional[InactivityFilter] = None
 
 
+# ==================== Ad Automation Rules ====================
+
+@dataclass
+class AdRule:
+    id: str
+    ad_id: str
+    group_ids: List[str]
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'id': self.id,
+            'ad_id': self.ad_id,
+            'group_ids': self.group_ids,
+            'created_at': self.created_at,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> 'AdRule':
+        return cls(
+            id=d['id'],
+            ad_id=d['ad_id'],
+            group_ids=d.get('group_ids', []),
+            created_at=d.get('created_at', ''),
+        )
+
+
+AD_RULES_PATH = 'data/ad_rules.json'
+ad_rules: List[AdRule] = []
+
+
+def _load_ad_rules() -> None:
+    global ad_rules
+    try:
+        if os.path.exists(AD_RULES_PATH):
+            with open(AD_RULES_PATH, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            ad_rules = [AdRule.from_dict(r) for r in data.get('rules', [])]
+            logger.info('Loaded %d ad rules', len(ad_rules))
+    except Exception as e:
+        logger.error('Failed to load ad rules: %s', e)
+        ad_rules = []
+
+
+def _save_ad_rules() -> None:
+    os.makedirs(os.path.dirname(AD_RULES_PATH), exist_ok=True)
+    tmp = AD_RULES_PATH + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump({'rules': [r.to_dict() for r in ad_rules]}, f, indent=2)
+    if os.path.exists(AD_RULES_PATH):
+        os.remove(AD_RULES_PATH)
+    os.rename(tmp, AD_RULES_PATH)
+
+
+_load_ad_rules()
+
+
 # ==================== Load Persisted State ====================
 
 def _load_persisted_state():
@@ -945,7 +1002,94 @@ def upload_ad_media():
     return jsonify({'success': True, 'filename': safe_name, 'media_type': media_type})
 
 
+# ==================== Ad Rules API ====================
+
+@app.route('/api/ad-rules', methods=['GET'])
+def get_ad_rules():
+    """List all ad automation rules, enriched with ad title and group names."""
+    ads_map = {a.id: a for a in content_manager.get_all_ads()}
+    groups_map = {str(g.id): g.name for g in app_state.groups}
+    result = []
+    for r in ad_rules:
+        ad = ads_map.get(r.ad_id)
+        result.append({
+            'id': r.id,
+            'ad_id': r.ad_id,
+            'ad_title': ad.title if ad else '[unknown ad]',
+            'group_ids': r.group_ids,
+            'group_names': [groups_map.get(gid, gid) for gid in r.group_ids],
+            'created_at': r.created_at,
+        })
+    return jsonify({'rules': result})
+
+
+@app.route('/api/ad-rules', methods=['POST'])
+def add_ad_rule():
+    """Create an ad automation rule: one ad → specific groups."""
+    if not client_manager.is_authenticated:
+        return jsonify({'error': 'Not authenticated'}), 401
+    data = request.get_json() or {}
+    ad_id = (data.get('ad_id') or '').strip()
+    group_ids = data.get('group_ids', [])
+    if not ad_id:
+        return jsonify({'error': 'ad_id is required'}), 400
+    if not group_ids:
+        return jsonify({'error': 'At least one group must be selected'}), 400
+    rule = AdRule(
+        id=f"rule_{int(datetime.now(timezone.utc).timestamp() * 1000)}",
+        ad_id=ad_id,
+        group_ids=[str(gid) for gid in group_ids],
+    )
+    ad_rules.append(rule)
+    _save_ad_rules()
+    app_state.add_log(f"Ad rule added: ad={ad_id}, {len(group_ids)} group(s)")
+    return jsonify({'success': True, 'rule': rule.to_dict()})
+
+
+@app.route('/api/ad-rules/<rule_id>', methods=['DELETE'])
+def delete_ad_rule(rule_id):
+    """Delete an ad automation rule."""
+    global ad_rules
+    initial = len(ad_rules)
+    ad_rules = [r for r in ad_rules if r.id != rule_id]
+    if len(ad_rules) < initial:
+        _save_ad_rules()
+        app_state.add_log(f"Ad rule deleted: {rule_id}")
+        return jsonify({'success': True})
+    return jsonify({'error': 'Rule not found'}), 404
+
+
 # ==================== Ad Scheduler API ====================
+
+
+async def _run_all_ad_rules_async() -> None:
+    """Coroutine executed by the daily scheduler job.
+
+    Iterates all ad rules and delivers each ad to its configured groups.
+    """
+    if not ad_rules:
+        app_state.add_log('Ad automation: no rules configured, skipping')
+        return
+    app_state.add_log(f'Ad automation: running {len(ad_rules)} rule(s)')
+    for rule in ad_rules:
+        matching_groups = [g for g in app_state.groups if str(g.id) in rule.group_ids]
+        if not matching_groups:
+            app_state.add_log(f'Ad rule {rule.id}: no matching groups, skipping')
+            continue
+        destinations = [
+            Destination(id=str(g.id), name=g.name, type='telegram')
+            for g in matching_groups
+        ]
+        try:
+            results = await ad_scheduler.run_daily_delivery(
+                ad_id_override=rule.ad_id,
+                destinations_override=destinations,
+            )
+            success = sum(1 for r in results if r.status == DeliveryStatus.SUCCESS)
+            app_state.add_log(f'Ad rule {rule.id}: {success}/{len(destinations)} sent')
+        except Exception as e:
+            app_state.add_log(f'Ad rule {rule.id} error: {e}', 'error')
+
 
 @app.route('/api/ad-scheduler/status', methods=['GET'])
 def ad_scheduler_status():
@@ -955,13 +1099,13 @@ def ad_scheduler_status():
 
 @app.route('/api/ad-scheduler/start', methods=['POST'])
 def start_ad_scheduler():
-    """Start the ad scheduler"""
+    """Start the ad automation scheduler."""
     if not client_manager.is_authenticated:
         return jsonify({'error': 'Not authenticated'}), 401
+    if not ad_rules:
+        return jsonify({'error': 'No automation rules configured. Add at least one rule first.'}), 400
 
     data = request.get_json() or {}
-
-    # Update schedule if provided
     schedule_time = data.get('schedule_time', config.schedule_time)
     tz = data.get('timezone', config.schedule_timezone)
     try:
@@ -969,19 +1113,10 @@ def start_ad_scheduler():
     except (ValueError, IndexError):
         return jsonify({'error': 'Invalid schedule_time format. Use HH:MM'}), 400
 
-    # Build destinations from current groups
-    destinations = [
-        Destination(id=str(g.id), name=g.name, type="telegram")
-        for g in app_state.groups
-    ]
-    if not destinations:
-        return jsonify({'error': 'No groups available. Scan groups first.'}), 400
-
-    ad_scheduler.set_destinations(destinations)
     ad_scheduler.update_schedule(hour, minute, tz)
-    ad_scheduler.start()
+    ad_scheduler.start(job_callback=_run_all_ad_rules_async)
 
-    app_state.add_log(f"Ad scheduler started: {hour:02d}:{minute:02d} ({tz})")
+    app_state.add_log(f"Ad automation started: {hour:02d}:{minute:02d} ({tz}), {len(ad_rules)} rule(s)")
     return jsonify({'success': True, 'status': ad_scheduler.get_status()})
 
 

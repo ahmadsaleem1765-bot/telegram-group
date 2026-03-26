@@ -190,6 +190,7 @@ class AdScheduler:
         self._last_run: Optional[datetime] = None
         self._log_callback: Optional[Callable[[str], Any]] = None
         self._delivery_progress: Dict[str, Any] = {"sent": 0, "failed": 0, "total": 0}
+        self._job_callback: Optional[Callable] = None
 
     @property
     def is_running(self) -> bool:
@@ -227,11 +228,21 @@ class AdScheduler:
             self.stop()
             self.start()
 
-    def start(self) -> None:
-        """Start the APScheduler with a daily cron trigger."""
+    def start(self, job_callback: Optional[Callable] = None) -> None:
+        """Start the APScheduler with a daily cron trigger.
+
+        Args:
+            job_callback: Optional coroutine callable to run instead of
+                          the default run_daily_delivery. Stored so that
+                          update_schedule() can preserve it on restart.
+        """
         if self._is_running:
             logger.warning("Ad scheduler already running")
             return
+
+        if job_callback is not None:
+            self._job_callback = job_callback
+        job = self._job_callback or self.run_daily_delivery
 
         self._scheduler = AsyncIOScheduler()
         trigger = CronTrigger(
@@ -240,7 +251,7 @@ class AdScheduler:
             timezone=self._timezone_str,
         )
         self._scheduler.add_job(
-            self.run_daily_delivery,
+            job,
             trigger=trigger,
             id="daily_ad_delivery",
             replace_existing=True,
