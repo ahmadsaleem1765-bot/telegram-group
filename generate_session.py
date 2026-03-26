@@ -15,12 +15,15 @@ Requirements:
 
 import os
 import asyncio
+import traceback
 from dotenv import load_dotenv
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError, PhoneCodeInvalidError
 
 # Load .env file
+print("[1/8] Loading .env file...")
 load_dotenv()
+print("      .env loaded OK")
 
 # Configuration - Edit these or set environment variables
 API_ID = os.getenv("API_ID", "")
@@ -36,16 +39,19 @@ SESSION_NAME = "telegram_automation"
 
 
 async def main():
+    print(f"\n[2/8] Checking credentials...")
     if not API_ID or not API_HASH:
         print("ERROR: Please set API_ID and API_HASH environment variables")
         print("Get them from https://my.telegram.org/apps")
         return
 
-    # Validate API_ID is numeric
     if not API_ID.isdigit():
         print("ERROR: API_ID must be a numeric value")
         print("Get it from https://my.telegram.org/apps")
         return
+
+    print(f"      API_ID  = {API_ID}")
+    print(f"      API_HASH = {API_HASH[:6]}...{API_HASH[-4:]} (masked)")
 
     print("=" * 50)
     print("Telegram Session String Generator")
@@ -53,50 +59,87 @@ async def main():
 
     # Build proxy settings if configured
     proxy = None
+    print(f"\n[3/8] Checking proxy settings...")
     if PROXY_TYPE and PROXY_HOST and PROXY_PORT:
-        import socks
-        proxy_types = {'socks5': socks.SOCKS5, 'socks4': socks.SOCKS4, 'http': socks.HTTP}
-        ptype = proxy_types.get(PROXY_TYPE.lower())
-        if ptype:
-            proxy = (ptype, PROXY_HOST, int(PROXY_PORT))
-            print(f"Using proxy: {PROXY_TYPE}://{PROXY_HOST}:{PROXY_PORT}")
-        else:
-            print(f"WARNING: Unknown proxy type '{PROXY_TYPE}', connecting without proxy")
+        try:
+            import socks
+            proxy_types = {'socks5': socks.SOCKS5, 'socks4': socks.SOCKS4, 'http': socks.HTTP}
+            ptype = proxy_types.get(PROXY_TYPE.lower())
+            if ptype:
+                proxy = (ptype, PROXY_HOST, int(PROXY_PORT))
+                print(f"      Proxy configured: {PROXY_TYPE}://{PROXY_HOST}:{PROXY_PORT}")
+            else:
+                print(f"WARNING: Unknown proxy type '{PROXY_TYPE}', connecting without proxy")
+        except ImportError:
+            print("WARNING: pysocks not installed. Run: pip install pysocks")
+            print("         Connecting without proxy...")
+    else:
+        print("      No proxy configured (set PROXY_TYPE/HOST/PORT in .env if needed)")
 
-    # Create client
+    print(f"\n[4/8] Creating Telegram client...")
     client = TelegramClient(SESSION_NAME, int(API_ID), API_HASH, proxy=proxy)
+    print("      Client created OK")
 
-    await client.connect()
+    print(f"\n[5/8] Connecting to Telegram servers...")
+    print("      (This is where network errors appear — needs internet access to Telegram)")
+    try:
+        await client.connect()
+        print("      Connected OK")
+    except Exception as e:
+        print(f"\nERROR connecting to Telegram: {e}")
+        print("\nFull traceback:")
+        traceback.print_exc()
+        print("\nPossible fixes:")
+        print("  - Turn on a VPN (Telegram may be blocked in your region)")
+        print("  - Set PROXY_TYPE/PROXY_HOST/PROXY_PORT in your .env")
+        print("  - Check your internet connection")
+        return
 
-    # Check if already authorized
-    if await client.is_user_authorized():
-        print("\nAlready authorized!")
-        session_string = client.session.save()
-        print(f"\nYour session string:\n\n{session_string}\n")
-        print("Copy this string and use it in your application!")
+    print(f"\n[6/8] Checking if already authorized...")
+    try:
+        if await client.is_user_authorized():
+            print("      Already authorized!")
+            session_string = client.session.save()
+            print(f"\nYour session string:\n\n{session_string}\n")
+            print("Copy this string and use it in your application!")
+            await client.disconnect()
+            return
+        print("      Not yet authorized — proceeding with login")
+    except Exception as e:
+        print(f"ERROR checking authorization: {e}")
+        traceback.print_exc()
         await client.disconnect()
         return
 
-    # Get phone number
-    phone = input("\nEnter your phone number (with country code, e.g., +1234567890): ")
+    phone = input("\nEnter your phone number (with country code, e.g., +8612345678900): ")
 
+    print(f"\n[7/8] Sending verification code to {phone}...")
     try:
-        # Send code request
         sent_code = await client.send_code_request(phone)
-        print(f"\nCode sent to {phone}")
+        print(f"      Code sent! Check your Telegram app (not SMS) for a message from 'Telegram'")
+    except Exception as e:
+        print(f"\nERROR sending code: {e}")
+        traceback.print_exc()
+        await client.disconnect()
+        return
 
-        # Get the verification code
-        code = input("Enter the verification code: ")
+    code = input("\nEnter the verification code from the Telegram app: ")
 
-        # Try to sign in
+    print(f"\n[8/8] Verifying code...")
+    try:
         try:
             await client.sign_in(phone, code, phone_code_hash=sent_code.phone_code_hash)
+            print("      Code accepted!")
         except SessionPasswordNeededError:
-            # Two-factor authentication
-            password = input("Enter your password (2FA): ")
+            print("      2FA password required")
+            password = input("Enter your 2FA password: ")
             await client.sign_in(password=password)
+            print("      2FA accepted!")
+        except PhoneCodeInvalidError:
+            print("\nERROR: Invalid verification code. Please try again.")
+            await client.disconnect()
+            return
 
-        # Get session string
         session_string = client.session.save()
 
         print("\n" + "=" * 50)
@@ -107,15 +150,13 @@ async def main():
         print("\n" + "=" * 50)
         print("\nIMPORTANT:")
         print("- Copy this string and save it securely")
-        print("- You'll need it to authenticate with Telegram")
+        print("- Add it to your .env file as: SESSION_STRING=<string>")
         print("- Keep it secret - anyone with this can access your account")
-        print("- If using Railway, set it as SESSION_STRING variable")
         print("=" * 50)
 
-    except PhoneCodeInvalidError:
-        print("\nERROR: Invalid verification code. Please try again.")
     except Exception as e:
-        print(f"\nERROR: {e}")
+        print(f"\nERROR during sign-in: {e}")
+        traceback.print_exc()
 
     await client.disconnect()
 
