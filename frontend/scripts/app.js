@@ -995,9 +995,8 @@ async function loadSchedulerStatus() {
         const running = data.is_running;
 
         elements.schedulerStatusBadge.textContent = running ? 'Running' : 'Stopped';
-        elements.schedulerStatusBadge.style.background = running ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)';
-        elements.schedulerStatusBadge.style.color = running ? '#10b981' : '#ef4444';
-        elements.schedulerStatusBadge.style.borderColor = running ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)';
+        elements.schedulerStatusBadge.classList.toggle('scheduler-running', running);
+        elements.schedulerStatusBadge.classList.toggle('scheduler-stopped', !running);
 
         if (data.schedule_time) elements.schedulerTime.value = data.schedule_time;
         if (data.timezone) elements.schedulerTimezone.value = data.timezone;

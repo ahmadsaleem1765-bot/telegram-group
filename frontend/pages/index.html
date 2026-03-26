@@ -338,153 +338,152 @@
             <section class="view" id="adsView">
                 <header class="view-header">
                     <h1>Ads</h1>
-                    <p class="view-subtitle">Send ads to groups or schedule daily delivery</p>
+                    <p class="view-subtitle">Manage and deliver ads to your groups</p>
                 </header>
 
-                <div style="display: flex; flex-direction: column; gap: 20px;">
+                <div class="ads-layout">
 
-                    <!-- Send Ad (mirrors New Broadcast) -->
-                    <div class="card full-width">
-                        <h2 class="card-title" style="margin-bottom: 20px; font-size: 1.25rem;">
-                            Send Ad
-                        </h2>
-
-                        <div class="form-group">
-                            <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;">AD:</label>
-                            <select id="adToSend" class="input" style="width: 100%; padding: 12px; background: #1f1f22; border: 1px solid #333; border-radius: 8px; color: #fff; margin-top: 8px;">
-                                <option value="">— Select an ad —</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group" style="margin-top: 15px;">
-                            <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;">TO:</label>
-                            <select id="adSendTarget" class="input" style="width: 100%; padding: 12px; background: #1f1f22; border: 1px solid #333; border-radius: 8px; color: #fff; margin-top: 8px;">
-                                <option value="all">All Groups</option>
-                                <option value="specific">Specific Groups</option>
-                            </select>
-                        </div>
-
-                        <!-- Specific Groups Multi-Select -->
-                        <div id="adGroupSelectorContainer" style="display: none; margin-top: 15px;">
-                            <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 8px;">SELECT GROUPS:</label>
-                            <div id="adGroupSelector" style="background: #1f1f22; border: 1px solid #333; border-radius: 8px; max-height: 200px; overflow-y: auto; padding: 8px;">
-                                <div style="color: #475569; font-size: 0.85rem; padding: 8px;">No groups scanned yet</div>
-                            </div>
-                            <div style="margin-top: 6px; display: flex; gap: 8px;">
-                                <button id="adSelectAllGroupsBtn" style="font-size: 0.75rem; background: transparent; border: 1px solid #444; color: #94a3b8; border-radius: 4px; padding: 3px 8px; cursor: pointer;">Select All</button>
-                                <button id="adClearGroupsBtn" style="font-size: 0.75rem; background: transparent; border: 1px solid #444; color: #94a3b8; border-radius: 4px; padding: 3px 8px; cursor: pointer;">Clear</button>
-                            </div>
-                        </div>
-
-                        <!-- Preview -->
-                        <div id="adSendPreviewContainer" style="margin-top: 15px; padding: 10px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; display: none;">
-                            <span style="color: #60a5fa; font-size: 0.9rem;" id="adSendPreviewText">Ready to send to 0 groups</span>
-                        </div>
-
-                        <div style="display: flex; gap: 10px; margin-top: 15px;">
-                            <button class="btn btn-primary btn-large" id="sendAdNowBtn" style="flex: 1; background: #007bff; border-radius: 8px;">
-                                Send Now
-                            </button>
-                            <button id="stopAdDeliveryBtn" style="flex: 0; display: none; background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.4); border-radius: 8px; padding: 12px 20px; cursor: pointer; font-weight: 600; white-space: nowrap;">
-                                &#9632; Stop
-                            </button>
-                        </div>
-
-                        <!-- Delivery Progress -->
-                        <div class="card full-width" id="adProgressCard" style="display: none; margin-top: 15px; padding: 15px; background: rgba(255,255,255,0.03); border: 1px solid #333; border-radius: 8px;">
-                            <h2 class="card-title" style="font-size: 1rem; margin-bottom: 10px;">Progress</h2>
-                            <div class="progress-bar">
-                                <div class="progress-fill" id="adProgressFill"></div>
-                            </div>
-                            <p class="progress-text" id="adProgressText">0 / 0 sent</p>
-                        </div>
-                    </div>
-
-                    <!-- Scheduled Delivery -->
-                    <div class="card full-width">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                            <h2 class="card-title" style="margin: 0; font-size: 1.25rem;">Scheduled Delivery</h2>
-                            <span id="schedulerStatusBadge" style="font-size: 0.8rem; padding: 4px 10px; border-radius: 20px; background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3);">Stopped</span>
-                        </div>
-
-                        <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px;">
-                            <div style="flex: 1; min-width: 140px;">
-                                <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 6px;">Daily Time</label>
-                                <input type="time" id="schedulerTime" class="input" value="09:00" style="width: 100%; background: #1f1f22; border: 1px solid #333; border-radius: 8px; color: #fff; padding: 10px;">
-                            </div>
-                            <div style="flex: 2; min-width: 180px;">
-                                <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 6px;">Timezone</label>
-                                <input type="text" id="schedulerTimezone" class="input" value="UTC" placeholder="e.g. UTC, US/Eastern" style="width: 100%; background: #1f1f22; border: 1px solid #333; border-radius: 8px; color: #fff; padding: 10px;">
-                            </div>
-                        </div>
-
-                        <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 16px;" id="schedulerLastRun">Last run: Never</div>
-
-                        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                            <button class="btn btn-primary" id="startSchedulerBtn" style="flex: 1;">Start Scheduler</button>
-                            <button class="btn btn-secondary" id="stopSchedulerBtn" style="flex: 1;" disabled>Stop Scheduler</button>
-                        </div>
-                    </div>
-
-                    <!-- Ad Content -->
-                    <div class="card full-width">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                            <h2 class="card-title" style="margin: 0; font-size: 1.25rem;">Ad Content</h2>
-                            <button id="newAdBtn" style="background: transparent; border: none; font-size: 1.5rem; color: #007bff; cursor: pointer;">+</button>
+                    <!-- Left: Ad Library -->
+                    <div class="card">
+                        <div class="ads-card-header">
+                            <h2 class="card-title" style="margin-bottom:0;">Ad Library</h2>
+                            <button id="newAdBtn" class="btn btn-primary btn-small">+ New Ad</button>
                         </div>
 
                         <!-- New/Edit Ad Form -->
-                        <div id="adForm" style="display: none; border-top: 1px solid #333; padding-top: 20px; margin-bottom: 20px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-                                <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;" id="adFormTitle">New Ad</label>
-                                <button id="cancelAdBtn" style="background: transparent; border: 1px solid #555; color: #fff; cursor: pointer; border-radius: 4px; padding: 4px 8px;">✕</button>
+                        <div id="adForm" class="ad-form-panel">
+                            <div class="ad-form-header">
+                                <span id="adFormTitle" class="form-section-label">New Ad</span>
+                                <button id="cancelAdBtn" class="btn btn-secondary btn-small">✕ Cancel</button>
                             </div>
                             <input type="hidden" id="adEditId">
-                            <div class="form-group" style="margin-bottom: 12px;">
-                                <label style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 4px; display: block;">Title *</label>
-                                <input type="text" id="adTitle" class="input" placeholder="Ad title" style="width: 100%; background: #1f1f22; border: 1px solid #333; border-radius: 8px; color: #fff; padding: 10px;">
+                            <div class="form-group">
+                                <label>Title *</label>
+                                <input type="text" id="adTitle" class="input" placeholder="Ad title">
                             </div>
-                            <div class="form-group" style="margin-bottom: 12px;">
-                                <label style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 4px; display: block;">Message (optional)</label>
-                                <textarea id="adMessage" class="input textarea" rows="3" placeholder="Ad caption or text..." style="width: 100%; background: #1f1f22; border: 1px solid #333; border-radius: 8px; color: #fff; padding: 10px;"></textarea>
+                            <div class="form-group">
+                                <label>Message <span class="label-muted">(optional)</span></label>
+                                <textarea id="adMessage" class="input textarea" rows="3" placeholder="Ad caption or text…"></textarea>
                             </div>
 
                             <!-- Media Upload -->
-                            <div class="form-group" style="margin-bottom: 12px;">
-                                <label style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 4px; display: block;">Media (photo / video / file)</label>
-                                <div id="adMediaPreview" style="display: none; margin-bottom: 8px; padding: 8px 12px; background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.25); border-radius: 6px; font-size: 0.85rem; color: #60a5fa; display: flex; align-items: center; gap: 8px; justify-content: space-between;">
+                            <div class="form-group">
+                                <label>Media <span class="label-muted">(photo / video / file)</span></label>
+                                <div id="adMediaPreview" class="media-preview" style="display:none;">
                                     <span id="adMediaPreviewName"></span>
-                                    <button id="adMediaClearBtn" style="background: transparent; border: none; color: #94a3b8; cursor: pointer; font-size: 1rem; line-height: 1;">✕</button>
+                                    <button id="adMediaClearBtn" class="btn-icon-sm">✕</button>
                                 </div>
-                                <label id="adMediaUploadLabel" style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #1f1f22; border: 1px dashed #444; border-radius: 8px; cursor: pointer; color: #94a3b8; font-size: 0.875rem; transition: border-color 0.2s;">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                                    <span id="adMediaUploadText">Click to upload photo, video, or file</span>
-                                    <input type="file" id="adMediaFile" style="display: none;" accept="image/*,video/*,.pdf,.zip,.mp3,.ogg">
+                                <label id="adMediaUploadLabel" class="upload-zone">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                    <span id="adMediaUploadText">Click to upload</span>
+                                    <input type="file" id="adMediaFile" style="display:none;" accept="image/*,video/*,.pdf,.zip,.mp3,.ogg">
                                 </label>
-                                <div id="adMediaUploadProgress" style="display: none; margin-top: 6px; font-size: 0.8rem; color: #60a5fa;">Uploading...</div>
+                                <p id="adMediaUploadProgress" class="help-text upload-hint" style="display:none;">Uploading…</p>
                             </div>
                             <input type="hidden" id="adMediaFilename">
                             <input type="hidden" id="adMediaType">
 
-                            <div style="display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap;">
-                                <div style="flex: 1; min-width: 140px;">
-                                    <label style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 4px; display: block;">Schedule Date (optional)</label>
-                                    <input type="date" id="adScheduleDate" class="input" style="width: 100%; background: #1f1f22; border: 1px solid #333; border-radius: 8px; color: #fff; padding: 10px;">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Schedule Date <span class="label-muted">(optional)</span></label>
+                                    <input type="date" id="adScheduleDate" class="input">
                                 </div>
-                                <div style="flex: 1; min-width: 140px;">
-                                    <label style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 4px; display: block;">Priority</label>
-                                    <input type="number" id="adPriority" class="input" value="0" min="0" style="width: 100%; background: #1f1f22; border: 1px solid #333; border-radius: 8px; color: #fff; padding: 10px;">
+                                <div class="form-group">
+                                    <label>Priority</label>
+                                    <input type="number" id="adPriority" class="input" value="0" min="0">
                                 </div>
                             </div>
-                            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
-                                <input type="checkbox" id="adIsActive" checked style="width: 16px; height: 16px; accent-color: #007bff;">
-                                <label for="adIsActive" style="color: #cbd5e1; font-size: 0.9rem;">Active (eligible for scheduled delivery)</label>
+
+                            <div class="form-group checkbox-group">
+                                <label class="checkbox">
+                                    <input type="checkbox" id="adIsActive" checked>
+                                    <span>Active — eligible for scheduled delivery</span>
+                                </label>
                             </div>
-                            <button class="btn btn-primary" id="saveAdBtn" style="width: 100%;">Save Ad</button>
+
+                            <button class="btn btn-primary" id="saveAdBtn" style="width:100%;">Save Ad</button>
                         </div>
 
                         <!-- Ads List -->
-                        <div id="adsList" style="color: #94a3b8; font-style: italic;">No ads yet. Click + to create one.</div>
+                        <div id="adsList" class="ads-empty-state">No ads yet. Click <strong>+ New Ad</strong> to create one.</div>
+                    </div>
+
+                    <!-- Right: Controls -->
+                    <div class="ads-controls">
+
+                        <!-- Send Ad -->
+                        <div class="card">
+                            <h2 class="card-title">Send Ad</h2>
+
+                            <div class="form-group">
+                                <label>Ad</label>
+                                <select id="adToSend" class="input">
+                                    <option value="">— Select an ad —</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Target</label>
+                                <select id="adSendTarget" class="input">
+                                    <option value="all">All Groups</option>
+                                    <option value="specific">Specific Groups</option>
+                                </select>
+                            </div>
+
+                            <div id="adGroupSelectorContainer" class="form-group" style="display:none;">
+                                <label>Select Groups</label>
+                                <div id="adGroupSelector" class="group-selector">
+                                    <div class="group-selector-empty">No groups scanned yet</div>
+                                </div>
+                                <div class="group-selector-actions">
+                                    <button id="adSelectAllGroupsBtn" class="btn-link">Select All</button>
+                                    <button id="adClearGroupsBtn" class="btn-link">Clear</button>
+                                </div>
+                            </div>
+
+                            <div id="adSendPreviewContainer" class="send-preview" style="display:none;">
+                                <span id="adSendPreviewText">Ready to send to 0 groups</span>
+                            </div>
+
+                            <div style="display:flex; gap:10px; margin-top:var(--space-md);">
+                                <button class="btn btn-primary" id="sendAdNowBtn" style="flex:1;">Send Now</button>
+                                <button id="stopAdDeliveryBtn" class="btn btn-danger" style="display:none;">&#9632; Stop</button>
+                            </div>
+
+                            <div id="adProgressCard" class="progress-inline" style="display:none;">
+                                <div class="progress-bar">
+                                    <div class="progress-fill" id="adProgressFill"></div>
+                                </div>
+                                <p class="progress-text" id="adProgressText">0 / 0 sent</p>
+                            </div>
+                        </div>
+
+                        <!-- Scheduled Delivery -->
+                        <div class="card">
+                            <div class="ads-card-header">
+                                <h2 class="card-title" style="margin-bottom:0;">Scheduler</h2>
+                                <span id="schedulerStatusBadge" class="status-badge scheduler-stopped">Stopped</span>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Daily Time</label>
+                                    <input type="time" id="schedulerTime" class="input" value="09:00">
+                                </div>
+                                <div class="form-group">
+                                    <label>Timezone</label>
+                                    <input type="text" id="schedulerTimezone" class="input" value="UTC" placeholder="e.g. UTC, US/Eastern">
+                                </div>
+                            </div>
+
+                            <p class="help-text" id="schedulerLastRun" style="margin-bottom:var(--space-lg);">Last run: Never</p>
+
+                            <div style="display:flex; gap:10px;">
+                                <button class="btn btn-primary" id="startSchedulerBtn" style="flex:1;">Start</button>
+                                <button class="btn btn-secondary" id="stopSchedulerBtn" style="flex:1;" disabled>Stop</button>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
             </section>
