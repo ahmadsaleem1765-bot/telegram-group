@@ -2,36 +2,46 @@
 
 ## System Overview
 
-The application is a Flask-based Telegram automation platform with a modular backend, a vanilla JavaScript frontend, and JSON-based persistence. The v1.1 release introduces an automated daily ad delivery pipeline.
+The application is a Flask-based Telegram automation platform with a modular backend, a vanilla JavaScript frontend, and JSON-based persistence. The v1.2 release adds a fully integrated Ads UI with content management and scheduler control.
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Flask Web Server                         │
-│                          (main.py)                              │
-├─────────────┬───────────────┬───────────────┬───────────────────┤
-│  Auth API   │  Groups API   │  Rules API    │  Ads & Scheduler  │
-│             │               │               │       API         │
-└──────┬──────┴───────┬───────┴───────┬───────┴────────┬──────────┘
-       │              │               │                │
-       ▼              ▼               ▼                ▼
-┌──────────┐  ┌──────────────┐ ┌───────────┐  ┌──────────────────┐
-│ Telegram │  │    Group     │ │   Rules   │  │   Ad Delivery    │
-│  Client  │  │   Scanner    │ │  Engine   │  │    Pipeline      │
-│ Manager  │  │              │ │           │  │                  │
-└──────────┘  └──────────────┘ └───────────┘  └──────────────────┘
-                                                       │
-                                          ┌────────────┼────────────┐
-                                          ▼            ▼            ▼
-                                   ┌───────────┐ ┌──────────┐ ┌─────────┐
-                                   │  Content  │ │ Delivery │ │   Ad    │
-                                   │  Manager  │ │  Engine  │ │Scheduler│
-                                   └─────┬─────┘ └────┬─────┘ └────┬────┘
-                                         │            │             │
-                                         ▼            ▼             ▼
-                                   ┌───────────┐ ┌──────────┐ ┌─────────┐
-                                   │ manifest  │ │ Channel  │ │Delivery │
-                                   │  .json    │ │ Adapters │ │ Ledger  │
-                                   └───────────┘ └──────────┘ └─────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                          Flask Web Server                              │
+│                            (main.py)                                   │
+├──────────┬─────────────┬─────────────┬────────────────┬───────────────┤
+│ Auth API │  Groups API │  Rules API  │  Automation API│ Ads &         │
+│          │             │             │                │ Scheduler API │
+└────┬─────┴──────┬──────┴──────┬──────┴───────┬────────┴───────┬───────┘
+     │            │             │              │                │
+     ▼            ▼             ▼              ▼                ▼
+┌─────────┐ ┌──────────┐ ┌──────────┐ ┌─────────────┐ ┌──────────────────┐
+│Telegram │ │  Group   │ │  Rules   │ │   Message   │ │  Ad Delivery     │
+│ Client  │ │ Scanner  │ │  Engine  │ │   Sender    │ │  Pipeline        │
+│ Manager │ │          │ │          │ │             │ │                  │
+└─────────┘ └──────────┘ └──────────┘ └─────────────┘ └──────────────────┘
+                                                                │
+                                               ┌───────────────┼───────────────┐
+                                               ▼               ▼               ▼
+                                        ┌───────────┐  ┌──────────────┐ ┌─────────┐
+                                        │  Content  │  │   Delivery   │ │   Ad    │
+                                        │  Manager  │  │   Engine     │ │Scheduler│
+                                        └─────┬─────┘  └──────┬───────┘ └────┬────┘
+                                              │               │               │
+                                              ▼               ▼               ▼
+                                        ┌──────────┐  ┌─────────────┐ ┌──────────┐
+                                        │manifest  │  │  Channel    │ │ Delivery │
+                                        │  .json   │  │  Adapters   │ │  Ledger  │
+                                        └──────────┘  └─────────────┘ └──────────┘
+
+Frontend (Vanilla JS SPA — frontend/pages/index.html + frontend/scripts/app.js)
+┌──────────┬──────────┬──────────┬──────────┬──────────┐
+│Dashboard │  Groups  │Automation│   Ads    │  Logs    │  ← Nav views
+└──────────┴──────────┴──────────┴──────────┴──────────┘
+                                    │
+                        ┌───────────┴───────────┐
+                        ▼                       ▼
+                 Scheduler Control        Ad Content CRUD
+                 (start/stop/now)         (create/edit/delete)
 ```
 
 ## Ad Delivery Pipeline
@@ -179,9 +189,34 @@ All configuration via environment variables (see `.env.example`):
 | `POST` | `/api/ad-scheduler/trigger` | Manual delivery now |
 | `GET` | `/api/ad-scheduler/ledger?date=YYYY-MM-DD` | View delivery records |
 
+## Frontend Views
+
+| View | Nav Label | Key Actions |
+|---|---|---|
+| Dashboard | Dashboard | Connect Telegram, Scan Groups, stats overview |
+| Groups | Groups | Browse/search/filter groups by active/inactive status |
+| Automation | Automation | Broadcast message to all or inactive groups; manage rules |
+| **Ads** | **Ads** | **Create/edit/delete ads; start/stop daily scheduler; Send Now** |
+| Activity Log | Activity Log | View structured application logs |
+
+### Ads View (v1.2)
+
+The Ads view exposes all ad-system backend capabilities via the UI:
+
+- **Scheduler Control card**: Running/Stopped badge, daily time + timezone inputs, Start / Stop / Send Now buttons
+- **Ad Content card**: List of all ads with active badge and message preview; `+` button opens an inline form for new/edited ads with title, message, optional schedule date, priority, and active toggle
+
 ## Testing Strategy
 
-- **Unit tests**: Each module tested in isolation with temporary directories
-- **Integration tests**: Full pipeline with mock adapters (no external credentials)
-- **Idempotency**: Verified by running delivery twice and asserting skip on second run
-- All tests are idempotent and use `pytest` `tmp_path` fixtures
+| File | Coverage |
+|---|---|
+| `tests/test_content_manager.py` | ContentManager CRUD, date rotation, hot-swap, media resolution |
+| `tests/test_ad_scheduler.py` | DeliveryLedger idempotency, AdScheduler lifecycle, delivery flow |
+| `tests/test_channel_adapter.py` | DeliveryEngine retries, backoff, adapter registration |
+| `tests/test_ads_api.py` | Flask API: `/api/ads` CRUD, `/api/ads/today`, scheduler endpoints, CSRF |
+
+- **Unit tests**: Each backend module tested in isolation with `tmp_path` fixtures
+- **Integration tests**: Full AdScheduler pipeline with mock adapters (no Telegram credentials needed)
+- **API tests**: Flask test client with per-test isolated `ContentManager` + `AdScheduler` via `monkeypatch`
+- **Idempotency**: Verified by running daily delivery twice and asserting SKIPPED on second run
+- Total: **58 tests**, all passing

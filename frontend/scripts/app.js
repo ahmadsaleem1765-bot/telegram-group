@@ -81,6 +81,27 @@ const elements = {
     twoFaPassword: document.getElementById('twoFaPassword'),
     loginBtn: document.getElementById('loginBtn'),
     
+    // Ads
+    schedulerStatusBadge: document.getElementById('schedulerStatusBadge'),
+    schedulerTime: document.getElementById('schedulerTime'),
+    schedulerTimezone: document.getElementById('schedulerTimezone'),
+    schedulerLastRun: document.getElementById('schedulerLastRun'),
+    startSchedulerBtn: document.getElementById('startSchedulerBtn'),
+    stopSchedulerBtn: document.getElementById('stopSchedulerBtn'),
+    sendAdNowBtn: document.getElementById('sendAdNowBtn'),
+    newAdBtn: document.getElementById('newAdBtn'),
+    adForm: document.getElementById('adForm'),
+    adFormTitle: document.getElementById('adFormTitle'),
+    cancelAdBtn: document.getElementById('cancelAdBtn'),
+    adEditId: document.getElementById('adEditId'),
+    adTitle: document.getElementById('adTitle'),
+    adMessage: document.getElementById('adMessage'),
+    adScheduleDate: document.getElementById('adScheduleDate'),
+    adPriority: document.getElementById('adPriority'),
+    adIsActive: document.getElementById('adIsActive'),
+    saveAdBtn: document.getElementById('saveAdBtn'),
+    adsList: document.getElementById('adsList'),
+
     // Toast
     toastContainer: document.getElementById('toastContainer')
 };
@@ -116,6 +137,9 @@ function switchView(viewId) {
         // Ensure groups are loaded for broadcast preview
         loadGroups().then(() => updateBroadcastPreview());
         loadRules();
+    } else if (viewId === 'ads') {
+        loadAds();
+        loadSchedulerStatus();
     } else if (viewId === 'logs') {
         loadLogs();
     }
@@ -754,6 +778,212 @@ window.deleteRule = async function(ruleId) {
     }
 }
 
+// ==================== Ads ====================
+async function loadSchedulerStatus() {
+    try {
+        const res = await fetch('/api/ad-scheduler/status');
+        const data = await res.json();
+        const running = data.is_running;
+
+        elements.schedulerStatusBadge.textContent = running ? 'Running' : 'Stopped';
+        elements.schedulerStatusBadge.style.background = running ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)';
+        elements.schedulerStatusBadge.style.color = running ? '#10b981' : '#ef4444';
+        elements.schedulerStatusBadge.style.borderColor = running ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)';
+
+        if (data.schedule_time) elements.schedulerTime.value = data.schedule_time;
+        if (data.timezone) elements.schedulerTimezone.value = data.timezone;
+
+        elements.schedulerLastRun.textContent = data.last_run
+            ? 'Last run: ' + new Date(data.last_run).toLocaleString()
+            : 'Last run: Never';
+
+        elements.startSchedulerBtn.disabled = running;
+        elements.stopSchedulerBtn.disabled = !running;
+    } catch (e) {
+        console.error('Failed to load scheduler status:', e);
+    }
+}
+
+async function startScheduler() {
+    try {
+        elements.startSchedulerBtn.disabled = true;
+        const response = await fetch('/api/ad-scheduler/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                schedule_time: elements.schedulerTime.value,
+                timezone: elements.schedulerTimezone.value || 'UTC'
+            })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            showToast('Scheduler started', 'success');
+            loadSchedulerStatus();
+        } else {
+            showToast(data.error || 'Failed to start scheduler', 'error');
+            elements.startSchedulerBtn.disabled = false;
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+        elements.startSchedulerBtn.disabled = false;
+    }
+}
+
+async function stopScheduler() {
+    try {
+        elements.stopSchedulerBtn.disabled = true;
+        const response = await fetch('/api/ad-scheduler/stop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        if (response.ok) {
+            showToast('Scheduler stopped', 'success');
+            loadSchedulerStatus();
+        } else {
+            showToast('Failed to stop scheduler', 'error');
+            elements.stopSchedulerBtn.disabled = false;
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+        elements.stopSchedulerBtn.disabled = false;
+    }
+}
+
+async function sendAdNow() {
+    try {
+        elements.sendAdNowBtn.disabled = true;
+        elements.sendAdNowBtn.textContent = 'Sending...';
+        const response = await fetch('/api/ad-scheduler/trigger', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        const data = await response.json();
+        if (response.ok) {
+            showToast('Ad delivery started', 'success');
+        } else {
+            showToast(data.error || 'Failed to trigger delivery', 'error');
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    } finally {
+        elements.sendAdNowBtn.disabled = false;
+        elements.sendAdNowBtn.textContent = 'Send Now';
+    }
+}
+
+async function loadAds() {
+    try {
+        const res = await fetch('/api/ads');
+        const data = await res.json();
+        renderAds(data.ads || []);
+    } catch (e) {
+        console.error('Failed to load ads:', e);
+    }
+}
+
+function renderAds(ads) {
+    if (!ads || ads.length === 0) {
+        elements.adsList.innerHTML = '<div style="color: #94a3b8; font-style: italic;">No ads yet. Click + to create one.</div>';
+        return;
+    }
+    elements.adsList.innerHTML = ads.map(ad => `
+        <div style="background: rgba(255,255,255,0.05); border: 1px solid #333; border-radius: 8px; padding: 15px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: start; gap: 12px;">
+            <div style="flex: 1; min-width: 0;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                    <span style="font-size: 1rem; font-weight: 600; color: #fff;">${escapeHtml(ad.title)}</span>
+                    <span style="font-size: 0.75rem; padding: 2px 8px; border-radius: 20px; background: ${ad.is_active ? 'rgba(16,185,129,0.15)' : 'rgba(100,100,100,0.15)'}; color: ${ad.is_active ? '#10b981' : '#64748b'}; border: 1px solid ${ad.is_active ? 'rgba(16,185,129,0.3)' : 'rgba(100,100,100,0.3)'};">${ad.is_active ? 'Active' : 'Inactive'}</span>
+                    ${ad.schedule_date ? `<span style="font-size: 0.75rem; color: #94a3b8;">📅 ${ad.schedule_date}</span>` : ''}
+                </div>
+                ${ad.message ? `<div style="color: #94a3b8; font-size: 0.875rem; white-space: pre-wrap; word-break: break-word;">${escapeHtml(ad.message.slice(0, 120))}${ad.message.length > 120 ? '…' : ''}</div>` : '<div style="color: #475569; font-size: 0.8rem; font-style: italic;">No message text</div>'}
+            </div>
+            <div style="display: flex; gap: 8px; flex-shrink: 0;">
+                <button onclick="editAd('${ad.id}')" style="background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); border-radius: 4px; padding: 6px 10px; cursor: pointer; font-size: 0.8rem;">Edit</button>
+                <button onclick="deleteAd('${ad.id}')" style="background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); border-radius: 4px; padding: 6px 10px; cursor: pointer; font-size: 0.8rem;">Delete</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function openAdForm(ad = null) {
+    elements.adEditId.value = ad ? ad.id : '';
+    elements.adTitle.value = ad ? ad.title : '';
+    elements.adMessage.value = ad ? (ad.message || '') : '';
+    elements.adScheduleDate.value = ad ? (ad.schedule_date || '') : '';
+    elements.adPriority.value = ad ? (ad.priority || 0) : 0;
+    elements.adIsActive.checked = ad ? ad.is_active : true;
+    elements.adFormTitle.textContent = ad ? 'Edit Ad' : 'New Ad';
+    elements.adForm.style.display = 'block';
+}
+
+window.editAd = async function(adId) {
+    try {
+        const res = await fetch('/api/ads');
+        const data = await res.json();
+        const ad = (data.ads || []).find(a => a.id === adId);
+        if (ad) openAdForm(ad);
+    } catch (e) {
+        showToast('Error loading ad: ' + e.message, 'error');
+    }
+};
+
+window.deleteAd = async function(adId) {
+    if (!confirm('Delete this ad?')) return;
+    try {
+        const res = await fetch('/api/ads/' + adId, { method: 'DELETE' });
+        if (res.ok) {
+            showToast('Ad deleted', 'success');
+            loadAds();
+        } else {
+            showToast('Failed to delete ad', 'error');
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    }
+};
+
+async function saveAd() {
+    const title = elements.adTitle.value.trim();
+    if (!title) {
+        showToast('Title is required', 'error');
+        return;
+    }
+
+    const payload = {
+        title,
+        message: elements.adMessage.value.trim(),
+        schedule_date: elements.adScheduleDate.value || null,
+        priority: parseInt(elements.adPriority.value) || 0,
+        is_active: elements.adIsActive.checked
+    };
+
+    const editId = elements.adEditId.value;
+    const url = editId ? '/api/ads/' + editId : '/api/ads';
+    const method = editId ? 'PUT' : 'POST';
+
+    try {
+        elements.saveAdBtn.disabled = true;
+        const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showToast(editId ? 'Ad updated' : 'Ad created', 'success');
+            elements.adForm.style.display = 'none';
+            loadAds();
+        } else {
+            showToast(data.error || 'Failed to save ad', 'error');
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    } finally {
+        elements.saveAdBtn.disabled = false;
+    }
+}
+
 // ==================== Logs ====================
 async function loadLogs() {
     try {
@@ -854,6 +1084,14 @@ function initEventListeners() {
     if (elements.cancelRuleBtn) elements.cancelRuleBtn.addEventListener('click', () => { elements.addRuleForm.style.display = 'none'; });
     if (elements.saveRuleBtn) elements.saveRuleBtn.addEventListener('click', saveRule);
     
+    // Ads
+    if (elements.startSchedulerBtn) elements.startSchedulerBtn.addEventListener('click', startScheduler);
+    if (elements.stopSchedulerBtn) elements.stopSchedulerBtn.addEventListener('click', stopScheduler);
+    if (elements.sendAdNowBtn) elements.sendAdNowBtn.addEventListener('click', sendAdNow);
+    if (elements.newAdBtn) elements.newAdBtn.addEventListener('click', () => openAdForm(null));
+    if (elements.cancelAdBtn) elements.cancelAdBtn.addEventListener('click', () => { elements.adForm.style.display = 'none'; });
+    if (elements.saveAdBtn) elements.saveAdBtn.addEventListener('click', saveAd);
+
     // Logs
     elements.refreshLogsBtn.addEventListener('click', loadLogs);
     elements.clearLogsBtn.addEventListener('click', clearLogs);
