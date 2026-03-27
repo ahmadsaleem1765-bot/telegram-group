@@ -784,8 +784,8 @@ def send_messages():
 
     config_obj = AutomationConfig(
         message_template=message_template,
-        delay_min=10,
-        delay_max=30,
+        delay_min=3,
+        delay_max=8,
         max_messages=1000,
         dry_run=False
     )
@@ -793,13 +793,20 @@ def send_messages():
     app_state.add_log(f"Starting broadcast to {target} groups...")
 
     def progress_callback(current: int, total: int, result):
-        status = "sent" if result.status == SendStatus.SENT else "failed"
-        app_state.add_log(
-            f"Message {status} to {result.group_name} ({current}/{total})"
-        )
+        if result.status == SendStatus.SENT:
+            app_state.add_log(f"Message sent to {result.group_name} ({current}/{total})")
+        else:
+            error_detail = f" — {result.error}" if result.error else ""
+            app_state.add_log(
+                f"Message failed to {result.group_name} ({current}/{total}){error_detail}", "error"
+            )
 
     async def _run_send():
         try:
+            # Warm up Telethon entity cache so stored group IDs can be resolved.
+            # This is required after app restarts because the StringSession only
+            # persists auth credentials, not entity access hashes.
+            await client_manager.client.get_dialogs(limit=500)
             results = await sender.send_messages(
                 groups_to_send,
                 config_obj,
