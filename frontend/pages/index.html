@@ -234,9 +234,14 @@
             <!-- Automation View -->
             <!-- Automation View (New Overhaul) -->
             <section class="view" id="automationView">
-                <header class="view-header">
-                    <h1>Automation</h1>
-                    <p class="view-subtitle">Broadcast or setup inactivity rules</p>
+                <header class="view-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div>
+                        <h1>Automation</h1>
+                        <p class="view-subtitle">Broadcast or setup inactivity rules</p>
+                    </div>
+                    <button id="emergencyStopBtn" title="Stop all automation immediately" style="background: rgba(239,68,68,0.15); color: #ef4444; border: 2px solid rgba(239,68,68,0.5); border-radius: 8px; padding: 10px 16px; cursor: pointer; font-weight: 700; white-space: nowrap; font-size: 0.85rem; letter-spacing: 0.5px; flex-shrink: 0; margin-top: 4px;">
+                        &#9632; Emergency Stop
+                    </button>
                 </header>
 
                 <div class="automation-grid" style="display: flex; flex-direction: column; gap: 20px;">

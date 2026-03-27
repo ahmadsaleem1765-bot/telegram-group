@@ -13,7 +13,8 @@ const state = {
     currentFilter: 'all',
     isScanning: false,
     isSending: false,
-    threshold: null
+    threshold: null,
+    broadcastStatusInterval: null
 };
 
 // ==================== DOM Elements ====================
@@ -139,6 +140,7 @@ const elements = {
 
     // Automation stop
     stopBroadcastBtn: document.getElementById('stopBroadcastBtn'),
+    emergencyStopBtn: document.getElementById('emergencyStopBtn'),
 
     // Toast
     toastContainer: document.getElementById('toastContainer')
@@ -731,8 +733,13 @@ async function stopBroadcast() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({})
         });
-        showToast('Broadcast stop requested', 'info');
+        showToast('Broadcast stopped', 'info');
+        if (state.broadcastStatusInterval) {
+            clearInterval(state.broadcastStatusInterval);
+            state.broadcastStatusInterval = null;
+        }
         elements.stopBroadcastBtn.style.display = 'none';
+        elements.progressCard.style.display = 'none';
         elements.sendBroadcastBtn.disabled = false;
         state.isSending = false;
     } catch (e) {
@@ -740,26 +747,52 @@ async function stopBroadcast() {
     }
 }
 
+async function emergencyStop() {
+    try {
+        await fetch('/api/automation/stop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        showToast('Emergency stop triggered — all automation halted', 'error');
+        if (state.broadcastStatusInterval) {
+            clearInterval(state.broadcastStatusInterval);
+            state.broadcastStatusInterval = null;
+        }
+        elements.stopBroadcastBtn.style.display = 'none';
+        elements.progressCard.style.display = 'none';
+        elements.sendBroadcastBtn.disabled = false;
+        state.isSending = false;
+    } catch (e) {
+        showToast('Emergency stop error: ' + e.message, 'error');
+    }
+}
+
 function checkBroadcastStatus() {
-    const interval = setInterval(async () => {
+    if (state.broadcastStatusInterval) {
+        clearInterval(state.broadcastStatusInterval);
+    }
+    state.broadcastStatusInterval = setInterval(async () => {
         try {
             const res = await fetch('/api/automation/status');
             const data = await res.json();
-            
+
             if (data.results && data.results.total > 0) {
                 const progress = data.results.total > 0 ? (data.results.sent + data.results.failed) / data.results.total : 0;
                 elements.progressFill.style.width = (progress * 100) + '%';
                 elements.progressText.textContent = `${data.results.sent} / ${data.results.total} sent`;
             }
-            
+
             if (!data.is_running) {
-                clearInterval(interval);
+                clearInterval(state.broadcastStatusInterval);
+                state.broadcastStatusInterval = null;
                 state.isSending = false;
                 elements.sendBroadcastBtn.disabled = false;
                 elements.stopBroadcastBtn.style.display = 'none';
+                elements.progressCard.style.display = 'none';
                 const summary = data.results || {};
                 showToast(`Broadcast complete! Sent ${summary.sent || 0}, ${summary.failed || 0} failed`, 'success');
-                elements.broadcastMessage.value = ''; // clear
+                elements.broadcastMessage.value = '';
                 await loadGroups();
                 await loadDashboard();
                 updateBroadcastPreview();
@@ -1455,6 +1488,7 @@ function initEventListeners() {
     
     // Automation stop
     if (elements.stopBroadcastBtn) elements.stopBroadcastBtn.addEventListener('click', stopBroadcast);
+    if (elements.emergencyStopBtn) elements.emergencyStopBtn.addEventListener('click', emergencyStop);
 
     // Ads - Send Ad
     if (elements.adSendTarget) elements.adSendTarget.addEventListener('change', updateAdSendPreview);
