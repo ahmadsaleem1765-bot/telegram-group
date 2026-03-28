@@ -811,7 +811,8 @@ def send_messages():
             # Warm up Telethon entity cache so stored group IDs can be resolved.
             # This is required after app restarts because the StringSession only
             # persists auth credentials, not entity access hashes.
-            await client_manager.client.get_dialogs(limit=500)
+            # limit=None fetches ALL dialogs so no group is missed.
+            await client_manager.client.get_dialogs(limit=None)
             results = await sender.send_messages(
                 groups_to_send,
                 config_obj,
@@ -1083,6 +1084,9 @@ async def _run_all_ad_rules_async() -> None:
     if not ad_rules:
         app_state.add_log('Ad automation: no rules configured, skipping')
         return
+    # Warm up entity cache independently so ad delivery doesn't rely on
+    # the broadcast automation having run first.
+    await client_manager.client.get_dialogs(limit=None)
     app_state.add_log(f'Ad automation: running {len(ad_rules)} rule(s)')
     for rule in ad_rules:
         matching_groups = [g for g in app_state.groups if str(g.id) in rule.group_ids]

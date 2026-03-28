@@ -298,7 +298,7 @@ class MessageSender:
                     entity = await client_manager.client.get_input_entity(PeerChat(group.id))
                 else:
                     entity = await client_manager.client.get_input_entity(group.id)
-            except (ValueError, TypeError):
+            except Exception:
                 pass
 
             # Strategy 2: resolve by username (works for public groups)

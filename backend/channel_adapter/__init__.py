@@ -118,9 +118,28 @@ class TelegramAdapter(ChannelAdapter):
     def adapter_type(self) -> str:
         return "telegram"
 
+    async def _resolve_entity(self, client: Any, destination_id: str) -> Any:
+        """Resolve a destination ID to a Telethon entity.
+
+        Tries the session cache first (via PeerChannel/PeerChat), then falls
+        back to a raw-int lookup that Telethon can satisfy even without cache
+        if the entity was recently seen.
+        """
+        from telethon.tl.types import PeerChannel, PeerChat
+        raw_id = int(destination_id)
+        # Try channel cache lookup first
+        for peer_cls in (PeerChannel, PeerChat):
+            try:
+                return await client.get_input_entity(peer_cls(raw_id))
+            except Exception:
+                pass
+        # Last resort: raw int (works if Telethon cache has it)
+        return raw_id
+
     async def send_text(self, destination_id: str, text: str) -> None:
         client = self._client_manager.client
-        await client.send_message(int(destination_id), text)
+        entity = await self._resolve_entity(client, destination_id)
+        await client.send_message(entity, text)
 
     async def send_media(
         self,
@@ -130,9 +149,8 @@ class TelegramAdapter(ChannelAdapter):
         caption: Optional[str] = None,
     ) -> None:
         client = self._client_manager.client
-        await client.send_file(
-            int(destination_id), media_path, caption=caption
-        )
+        entity = await self._resolve_entity(client, destination_id)
+        await client.send_file(entity, media_path, caption=caption)
 
     async def is_available(self) -> bool:
         return self._client_manager.is_authenticated
