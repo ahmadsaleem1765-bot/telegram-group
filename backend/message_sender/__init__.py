@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from enum import Enum
 
 from telethon.errors import FloodWaitError, MessageNotModifiedError
-from telethon.tl.types import InputPeerChannel, InputPeerChat
+from telethon.tl.types import InputPeerChannel, InputPeerChat, PeerChannel, PeerChat
 
 from backend.group_scanner import Group
 from backend.telegram_client import client_manager
@@ -287,9 +287,17 @@ class MessageSender:
             entity = None
 
             # Strategy 1: get_input_entity from session cache (best — uses
-            # the access_hash Telethon fetched during the get_dialogs warm-up)
+            # the access_hash Telethon fetched during the get_dialogs warm-up).
+            # We must pass PeerChannel/PeerChat instead of a bare int because
+            # Telethon treats a raw int as a "marked" ID, but entity.id stores
+            # the bare (unmarked) channel ID, causing cache misses.
             try:
-                entity = await client_manager.client.get_input_entity(group.id)
+                if group.entity_type == 'channel':
+                    entity = await client_manager.client.get_input_entity(PeerChannel(group.id))
+                elif group.entity_type == 'chat':
+                    entity = await client_manager.client.get_input_entity(PeerChat(group.id))
+                else:
+                    entity = await client_manager.client.get_input_entity(group.id)
             except (ValueError, TypeError):
                 pass
 
