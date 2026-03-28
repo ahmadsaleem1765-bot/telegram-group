@@ -206,6 +206,46 @@ The Ads view exposes all ad-system backend capabilities via the UI:
 - **Scheduler Control card**: Running/Stopped badge, daily time + timezone inputs, Start / Stop / Send Now buttons
 - **Ad Content card**: List of all ads with active badge and message preview; `+` button opens an inline form for new/edited ads with title, message, optional schedule date, priority, and active toggle
 
+## Message Sender — State Machine
+
+```
+        reset()
+           │
+           ▼
+       IDLE (_is_running=False)
+           │
+    send_messages() called
+           │
+           ▼
+      RUNNING (_is_running=True)
+       /        \
+  pause()      stop()
+     │             │
+     ▼             ▼
+  PAUSED       STOPPING
+  (loop        (_should_stop=True,
+   polls 1s)    exits after current group)
+     │
+  resume()
+     │
+     ▼
+  RUNNING
+           │
+    loop exhausted or stopped
+           │
+           ▼
+       IDLE (_is_running=False)
+```
+
+Key invariant: `_is_running` is always `False` when `send_messages()` returns, even on exception (enforced by `finally` block).
+
+### Progress Tracking
+
+- `_total_groups`: set once at the start of `send_messages()` to `min(len(groups), config.max_messages)`
+- `progress = len(_results) / _total_groups` — fraction of groups processed (0.0–1.0)
+- `pending = max(0, _total_groups - len(_results))` — groups not yet attempted
+- `sent`, `failed` track final outcomes; SKIPPED and RATE_LIMITED-then-failed are counted in `failed`
+
 ## Testing Strategy
 
 | File | Coverage |
@@ -214,9 +254,10 @@ The Ads view exposes all ad-system backend capabilities via the UI:
 | `tests/test_ad_scheduler.py` | DeliveryLedger idempotency, AdScheduler lifecycle, delivery flow |
 | `tests/test_channel_adapter.py` | DeliveryEngine retries, backoff, adapter registration |
 | `tests/test_ads_api.py` | Flask API: `/api/ads` CRUD, `/api/ads/today`, scheduler endpoints, CSRF |
+| `tests/test_message_sender.py` | AutomationConfig validation, MessageSender state machine, progress/summary, FloodWait retry, is_sending flag leak |
 
 - **Unit tests**: Each backend module tested in isolation with `tmp_path` fixtures
 - **Integration tests**: Full AdScheduler pipeline with mock adapters (no Telegram credentials needed)
 - **API tests**: Flask test client with per-test isolated `ContentManager` + `AdScheduler` via `monkeypatch`
 - **Idempotency**: Verified by running daily delivery twice and asserting SKIPPED on second run
-- Total: **58 tests**, all passing
+- Total: **~80 tests**, all passing

@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from enum import Enum
 
 from telethon.errors import FloodWaitError, MessageNotModifiedError
+from telethon.tl.types import InputPeerChannel, InputPeerChat
 
 from backend.group_scanner import Group
 from backend.telegram_client import client_manager
@@ -85,6 +86,7 @@ class MessageSender:
         self._results: List[MessageResult] = []
         self._sent_count = 0
         self._failed_count = 0
+        self._total_groups = 0
 
     @property
     def is_running(self) -> bool:
@@ -108,8 +110,9 @@ class MessageSender:
 
     @property
     def progress(self) -> float:
-        total = self._sent_count + self._failed_count
-        return total / len(self._results) if self._results else 0
+        if not self._total_groups:
+            return 0.0
+        return len(self._results) / self._total_groups
 
     def pause(self):
         """Pause the sending process"""
@@ -134,6 +137,7 @@ class MessageSender:
         self._results = []
         self._sent_count = 0
         self._failed_count = 0
+        self._total_groups = 0
 
     async def send_messages(
         self,
@@ -167,6 +171,7 @@ class MessageSender:
             # Limit groups to max_messages
             groups_to_send = groups[:config.max_messages]
             total = len(groups_to_send)
+            self._total_groups = total
 
             log_callback = log_callback or logger.info
 
@@ -276,8 +281,35 @@ class MessageSender:
                     message=message
                 )
 
-            # Actually send the message
-            await client_manager.client.send_message(group.id, message)
+            # Resolve the entity for reliable delivery.
+            # Priority: Telethon session cache (freshest access_hash from
+            # the get_dialogs warm-up) → username → stored InputPeer → raw ID.
+            entity = None
+
+            # Strategy 1: get_input_entity from session cache (best — uses
+            # the access_hash Telethon fetched during the get_dialogs warm-up)
+            try:
+                entity = await client_manager.client.get_input_entity(group.id)
+            except (ValueError, TypeError):
+                pass
+
+            # Strategy 2: resolve by username (works for public groups)
+            if entity is None and group.username:
+                try:
+                    entity = await client_manager.client.get_input_entity(group.username)
+                except (ValueError, TypeError):
+                    pass
+
+            # Strategy 3: construct InputPeer from stored data
+            if entity is None:
+                if group.entity_type == 'channel' and group.access_hash is not None:
+                    entity = InputPeerChannel(group.id, group.access_hash)
+                elif group.entity_type == 'chat':
+                    entity = InputPeerChat(group.id)
+                else:
+                    entity = group.id
+
+            await client_manager.client.send_message(entity, message)
 
             return MessageResult(
                 group_id=group.id,
@@ -289,13 +321,31 @@ class MessageSender:
         except FloodWaitError as e:
             logger.warning(f"Rate limited, waiting {e.seconds} seconds")
             await asyncio.sleep(e.seconds)
-            return MessageResult(
-                group_id=group.id,
-                group_name=group.name,
-                status=SendStatus.RATE_LIMITED,
-                message=message,
-                error=f"Rate limited: wait {e.seconds}s"
-            )
+            if self._should_stop:
+                return MessageResult(
+                    group_id=group.id,
+                    group_name=group.name,
+                    status=SendStatus.RATE_LIMITED,
+                    message=message,
+                    error=f"Rate limited: stopped during wait ({e.seconds}s)"
+                )
+            try:
+                await client_manager.client.send_message(entity, message)
+                return MessageResult(
+                    group_id=group.id,
+                    group_name=group.name,
+                    status=SendStatus.SENT,
+                    message=message
+                )
+            except Exception as retry_err:
+                logger.error(f"Rate-limit retry failed for {group.name}: {retry_err}")
+                return MessageResult(
+                    group_id=group.id,
+                    group_name=group.name,
+                    status=SendStatus.FAILED,
+                    message=message,
+                    error=f"Rate-limit retry failed: {retry_err}"
+                )
 
         except MessageNotModifiedError:
             return MessageResult(
@@ -318,11 +368,12 @@ class MessageSender:
 
     def get_results_summary(self) -> Dict[str, Any]:
         """Get summary of sending results"""
+        processed = len(self._results)
         return {
-            'total': len(self._results),
+            'total': self._total_groups,
             'sent': self._sent_count,
             'failed': self._failed_count,
-            'pending': len(self._results) - self._sent_count - self._failed_count,
+            'pending': max(0, self._total_groups - processed),
             'progress': self.progress,
             'is_running': self._is_running,
             'is_paused': self._is_paused

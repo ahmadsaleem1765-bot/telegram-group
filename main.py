@@ -730,11 +730,13 @@ def send_messages():
     with app_state_lock:
         if app_state.is_sending:
             return jsonify({'error': 'Sending already in progress'}), 400
-        app_state.is_sending = True
 
     data = request.get_json() or {}
     message_template = data.get('message', '')
     target = data.get('target', 'all')  # "all" or "inactive"
+
+    if not message_template.strip():
+        return jsonify({'error': 'Message required'}), 400
 
     if target == 'inactive':
         period_value = int(data.get('period_value', 30))
@@ -779,8 +781,11 @@ def send_messages():
     if not groups_to_send:
         return jsonify({'error': 'No groups to send to (try scanning first or increasing filter period)'}), 400
 
-    if not message_template.strip():
-        return jsonify({'error': 'Message required'}), 400
+    # All validation passed — claim the sending lock
+    with app_state_lock:
+        if app_state.is_sending:
+            return jsonify({'error': 'Sending already in progress'}), 400
+        app_state.is_sending = True
 
     config_obj = AutomationConfig(
         message_template=message_template,
@@ -820,7 +825,8 @@ def send_messages():
                     for g in app_state.groups:
                         if g.id in successful_ids:
                             g.last_message_time = now
-                persistence.save_groups([g.to_dict() for g in app_state.groups])
+                    groups_snapshot = [g.to_dict() for g in app_state.groups]
+                persistence.save_groups(groups_snapshot)
 
             summary = sender.get_results_summary()
             app_state.add_log(

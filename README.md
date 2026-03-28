@@ -177,6 +177,7 @@ Optional environment variables:
 | `/api/groups/scan`              | POST   | Scan all groups                    |
 | `/api/groups`                   | GET    | Get all groups                     |
 | `/api/automation/send`          | POST   | Send messages (broadcast)          |
+| `/api/automation/status`        | GET    | Broadcast progress and counts      |
 | `/api/automation/stop`          | POST   | Stop automation                    |
 | `/api/ads`                      | GET    | List all ad content                |
 | `/api/ads`                      | POST   | Create a new ad                    |
@@ -214,7 +215,8 @@ pytest
 - **Preview Mode**: Test automation without sending messages
 - **Stop Button**: Cancel automation at any time
 - **Maximum Messages**: Limit messages per run
-- **Error Handling**: Automatic retry on failures
+- **FloodWait Retry**: Automatically waits and retries when Telegram rate-limits a send
+- **Atomic Sending Lock**: Broadcast validation failures never leave the app in a locked state
 
 ## Development
 

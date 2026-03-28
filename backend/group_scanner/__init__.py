@@ -27,6 +27,8 @@ class Group:
     last_message_time: Optional[datetime]
     member_count: Optional[int]
     is_active: bool = False
+    access_hash: Optional[int] = None
+    entity_type: str = 'unknown'  # 'channel' or 'chat'
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -35,7 +37,9 @@ class Group:
             'username': self.username,
             'last_message_time': self.last_message_time.isoformat() if self.last_message_time else None,
             'member_count': self.member_count,
-            'is_active': self.is_active
+            'is_active': self.is_active,
+            'access_hash': self.access_hash,
+            'entity_type': self.entity_type,
         }
 
     @classmethod
@@ -49,7 +53,9 @@ class Group:
             username=data.get('username'),
             last_message_time=lmt,
             member_count=data.get('member_count'),
-            is_active=data.get('is_active', False)
+            is_active=data.get('is_active', False),
+            access_hash=data.get('access_hash'),
+            entity_type=data.get('entity_type', 'unknown'),
         )
 
 
@@ -173,13 +179,25 @@ class GroupScanner:
             except Exception as e:
                 logger.debug(f"Could not get messages for {group_name}: {e}")
 
+            # Store access_hash and entity_type for reliable message sending.
+            # InputPeerChannel requires (id, access_hash); InputPeerChat only needs id.
+            access_hash = getattr(entity, 'access_hash', None)
+            if isinstance(entity, Channel):
+                entity_type = 'channel'
+            elif isinstance(entity, Chat):
+                entity_type = 'chat'
+            else:
+                entity_type = 'unknown'
+
             return Group(
                 id=group_id,
                 name=group_name,
                 username=group_username,
                 last_message_time=last_message_time,
                 member_count=member_count,
-                is_active=False
+                is_active=False,
+                access_hash=access_hash,
+                entity_type=entity_type,
             )
 
         except Exception as e:
