@@ -12,6 +12,7 @@ import logging
 from typing import Optional, List, Dict, Any, Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
+import asyncio
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -175,6 +176,7 @@ class AdScheduler:
         schedule_hour: int = 9,
         schedule_minute: int = 0,
         timezone_str: str = "UTC",
+        event_loop=None,
     ) -> None:
         self._content_manager = content_manager
         self._delivery_engine = delivery_engine
@@ -191,6 +193,7 @@ class AdScheduler:
         self._log_callback: Optional[Callable[[str], Any]] = None
         self._delivery_progress: Dict[str, Any] = {"sent": 0, "failed": 0, "total": 0}
         self._job_callback: Optional[Callable] = None
+        self._event_loop = event_loop
 
     @property
     def is_running(self) -> bool:
@@ -228,6 +231,10 @@ class AdScheduler:
             self.stop()
             self.start()
 
+    def set_event_loop(self, loop) -> None:
+        """Set the asyncio event loop for the scheduler to use."""
+        self._event_loop = loop
+
     def start(self, job_callback: Optional[Callable] = None) -> None:
         """Start the APScheduler with a daily cron trigger.
 
@@ -244,6 +251,23 @@ class AdScheduler:
             self._job_callback = job_callback
         job = self._job_callback or self.run_daily_delivery
 
+        if self._event_loop is not None and self._event_loop.is_running():
+            # AsyncIOScheduler.start() calls asyncio.get_running_loop() internally,
+            # so it must be invoked from within a running loop. When called from
+            # Flask's WSGI thread the loop only runs in a background thread, so we
+            # schedule the startup as a coroutine on that loop and block until done.
+            future = asyncio.run_coroutine_threadsafe(
+                self._start_scheduler_on_loop(job), self._event_loop
+            )
+            future.result(timeout=10)
+        else:
+            self._do_start(job)
+
+    async def _start_scheduler_on_loop(self, job) -> None:
+        """Coroutine that starts the APScheduler from within the running loop."""
+        self._do_start(job)
+
+    def _do_start(self, job) -> None:
         self._scheduler = AsyncIOScheduler()
         trigger = CronTrigger(
             hour=self._schedule_hour,

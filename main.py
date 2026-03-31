@@ -8,7 +8,7 @@ import os
 import json
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field
 
@@ -111,9 +111,15 @@ class AppState:
         self._is_dirty = True
 
     def add_log(self, message: str, level: str = "info"):
-        """Add a log entry"""
+        """Add a log entry with local time"""
+        try:
+            import pytz
+            local_tz = pytz.timezone(config.schedule_timezone)
+            local_now = datetime.now(local_tz)
+        except Exception:
+            local_now = datetime.now(timezone.utc)
         entry = {
-            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'timestamp': local_now.isoformat(),
             'level': level,
             'message': message
         }
@@ -288,6 +294,10 @@ ad_scheduler.set_log_callback(lambda msg: app_state.add_log(msg))
 
 # Global event loop for background tasks and Telegram client
 _global_loop = asyncio.new_event_loop()
+
+# Wire the event loop to the scheduler so APScheduler can run
+# async jobs on the correct loop (started from Flask's WSGI thread).
+ad_scheduler.set_event_loop(_global_loop)
 
 
 async def automation_worker():
@@ -1130,8 +1140,13 @@ def start_ad_scheduler():
     except (ValueError, IndexError):
         return jsonify({'error': 'Invalid schedule_time format. Use HH:MM'}), 400
 
-    ad_scheduler.update_schedule(hour, minute, tz)
-    ad_scheduler.start(job_callback=_run_all_ad_rules_async)
+    try:
+        ad_scheduler.update_schedule(hour, minute, tz)
+        ad_scheduler.start(job_callback=_run_all_ad_rules_async)
+    except Exception as e:
+        logger.error(f"Failed to start ad scheduler: {e}", exc_info=True)
+        app_state.add_log(f"Ad scheduler start failed: {e}", "error")
+        return jsonify({'error': f'Failed to start scheduler: {str(e)}'}), 500
 
     app_state.add_log(f"Ad automation started: {hour:02d}:{minute:02d} ({tz}), {len(ad_rules)} rule(s)")
     return jsonify({'success': True, 'status': ad_scheduler.get_status()})
@@ -1220,6 +1235,21 @@ def get_delivery_ledger():
 def dashboard():
     """Get dashboard data"""
     return jsonify(app_state.get_statistics())
+
+
+@app.route('/api/server-time', methods=['GET'])
+def server_time():
+    """Get server's current local time and configured timezone"""
+    try:
+        import pytz
+        local_tz = pytz.timezone(config.schedule_timezone)
+        local_now = datetime.now(local_tz)
+    except Exception:
+        local_now = datetime.now(timezone.utc)
+    return jsonify({
+        'server_time': local_now.isoformat(),
+        'timezone': config.schedule_timezone,
+    })
 
 
 # ==================== Logs API ====================

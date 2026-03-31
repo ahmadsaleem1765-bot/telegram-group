@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "<string>", line 16, in <module>
+    scheduler.start(job_callback=cb)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\flylu\OneDrive\Desktop\Telegam Group Messaging\backend\ad_scheduler\__init__.py", line 272, in start
+    self._scheduler.start()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\flylu\AppData\Local\Python\pythoncore-3.14-64\Lib\site-packages\apscheduler\schedulers\asyncio.py", line 36, in start
+    self._eventloop = asyncio.get_running_loop()
+                      ~~~~~~~~~~~~~~~~~~~~~~~~^^
+RuntimeError: no running event loop
