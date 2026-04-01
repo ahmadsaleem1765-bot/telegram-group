@@ -214,6 +214,8 @@ class AdRule:
 
 AD_RULES_PATH = 'data/ad_rules.json'
 ad_rules: List[AdRule] = []
+# Optional group filter set when the scheduler is started with specific groups
+_scheduler_group_ids: Optional[List[str]] = None
 
 
 def _load_ad_rules() -> None:
@@ -377,11 +379,12 @@ async def automation_worker():
                         )
 
                         successful_ids = {r.group_id for r in results if r.status == SendStatus.SENT}
-                        if successful_ids:
+                        attempted_ids = {r.group_id for r in results}
+                        if attempted_ids:
                             now = datetime.now(timezone.utc)
                             with app_state_lock:
                                 for g in app_state.groups:
-                                    if g.id in successful_ids:
+                                    if g.id in attempted_ids:
                                         g.last_message_time = now
                                 groups_snapshot = [g.to_dict() for g in app_state.groups]
                             persistence.save_groups(groups_snapshot)
@@ -1090,6 +1093,7 @@ async def _run_all_ad_rules_async() -> None:
     """Coroutine executed by the daily scheduler job.
 
     Iterates all ad rules and delivers each ad to its configured groups.
+    Respects _scheduler_group_ids filter if set.
     """
     if not ad_rules:
         app_state.add_log('Ad automation: no rules configured, skipping')
@@ -1099,7 +1103,12 @@ async def _run_all_ad_rules_async() -> None:
     await client_manager.client.get_dialogs(limit=None)
     app_state.add_log(f'Ad automation: running {len(ad_rules)} rule(s)')
     for rule in ad_rules:
-        matching_groups = [g for g in app_state.groups if str(g.id) in rule.group_ids]
+        # If a group filter is active, intersect with the rule's group list
+        if _scheduler_group_ids is not None:
+            effective_ids = [gid for gid in rule.group_ids if gid in _scheduler_group_ids]
+        else:
+            effective_ids = rule.group_ids
+        matching_groups = [g for g in app_state.groups if str(g.id) in effective_ids]
         if not matching_groups:
             app_state.add_log(f'Ad rule {rule.id}: no matching groups, skipping')
             continue
@@ -1127,6 +1136,7 @@ def ad_scheduler_status():
 @app.route('/api/ad-scheduler/start', methods=['POST'])
 def start_ad_scheduler():
     """Start the ad automation scheduler."""
+    global _scheduler_group_ids
     if not client_manager.is_authenticated:
         return jsonify({'error': 'Not authenticated'}), 401
     if not ad_rules:
@@ -1135,10 +1145,14 @@ def start_ad_scheduler():
     data = request.get_json() or {}
     schedule_time = data.get('schedule_time', config.schedule_time)
     tz = data.get('timezone', config.schedule_timezone)
+    group_ids = data.get('group_ids')  # Optional list of specific group IDs to target
     try:
         hour, minute = int(schedule_time.split(':')[0]), int(schedule_time.split(':')[1])
     except (ValueError, IndexError):
         return jsonify({'error': 'Invalid schedule_time format. Use HH:MM'}), 400
+
+    # Store group filter (None means all groups)
+    _scheduler_group_ids = [str(gid) for gid in group_ids] if group_ids else None
 
     try:
         ad_scheduler.update_schedule(hour, minute, tz)
@@ -1148,14 +1162,17 @@ def start_ad_scheduler():
         app_state.add_log(f"Ad scheduler start failed: {e}", "error")
         return jsonify({'error': f'Failed to start scheduler: {str(e)}'}), 500
 
-    app_state.add_log(f"Ad automation started: {hour:02d}:{minute:02d} ({tz}), {len(ad_rules)} rule(s)")
+    group_info = f", {len(_scheduler_group_ids)} group(s) selected" if _scheduler_group_ids else ", all groups"
+    app_state.add_log(f"Ad automation started: {hour:02d}:{minute:02d} ({tz}), {len(ad_rules)} rule(s){group_info}")
     return jsonify({'success': True, 'status': ad_scheduler.get_status()})
 
 
 @app.route('/api/ad-scheduler/stop', methods=['POST'])
 def stop_ad_scheduler():
     """Stop the ad scheduler"""
+    global _scheduler_group_ids
     ad_scheduler.stop()
+    _scheduler_group_ids = None
     app_state.add_log("Ad scheduler stopped")
     return jsonify({'success': True})
 

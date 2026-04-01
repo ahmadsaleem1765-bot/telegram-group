@@ -104,6 +104,11 @@ const elements = {
     schedulerLastRun: document.getElementById('schedulerLastRun'),
     startSchedulerBtn: document.getElementById('startSchedulerBtn'),
     stopSchedulerBtn: document.getElementById('stopSchedulerBtn'),
+    schedulerGroupTarget: document.getElementById('schedulerGroupTarget'),
+    schedulerGroupSelectorContainer: document.getElementById('schedulerGroupSelectorContainer'),
+    schedulerGroupSelector: document.getElementById('schedulerGroupSelector'),
+    schedulerSelectAllGroupsBtn: document.getElementById('schedulerSelectAllGroupsBtn'),
+    schedulerClearGroupsBtn: document.getElementById('schedulerClearGroupsBtn'),
 
     // Ads - Automation Rules
     newAdRuleBtn: document.getElementById('newAdRuleBtn'),
@@ -1060,16 +1065,43 @@ async function loadSchedulerStatus() {
     }
 }
 
+function populateSchedulerGroupSelector() {
+    if (!elements.schedulerGroupSelector) return;
+    if (!state.groups || state.groups.length === 0) {
+        elements.schedulerGroupSelector.innerHTML = '<div style="color: #475569; font-size: 0.85rem; padding: 8px;">No groups scanned yet</div>';
+        return;
+    }
+    elements.schedulerGroupSelector.innerHTML = state.groups.map(g => `
+        <label style="display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 6px; cursor: pointer; transition: background 0.15s;"
+               onmouseover="this.style.background='rgba(255,255,255,0.05)'"
+               onmouseout="this.style.background='transparent'">
+            <input type="checkbox" class="scheduler-group-checkbox" value="${g.id}" style="accent-color: #007bff;">
+            <span style="color: #f1f5f9; font-size: 0.9rem;">${escapeHtml(g.name)}</span>
+        </label>
+    `).join('');
+}
+
 async function startScheduler() {
+    const target = elements.schedulerGroupTarget ? elements.schedulerGroupTarget.value : 'all';
+    let groupIds = null;
+    if (target === 'specific') {
+        groupIds = Array.from(document.querySelectorAll('.scheduler-group-checkbox:checked')).map(cb => cb.value);
+        if (groupIds.length === 0) {
+            showToast('Please select at least one group', 'error');
+            return;
+        }
+    }
     try {
         elements.startSchedulerBtn.disabled = true;
+        const body = {
+            schedule_time: elements.schedulerTime.value,
+            timezone: elements.schedulerTimezone.value || 'UTC'
+        };
+        if (groupIds) body.group_ids = groupIds;
         const response = await fetch('/api/ad-scheduler/start', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                schedule_time: elements.schedulerTime.value,
-                timezone: elements.schedulerTimezone.value || 'UTC'
-            })
+            body: JSON.stringify(body)
         });
         const data = await response.json();
         if (response.ok) {
@@ -1507,6 +1539,19 @@ function initEventListeners() {
     // Ads - Scheduler
     if (elements.startSchedulerBtn) elements.startSchedulerBtn.addEventListener('click', startScheduler);
     if (elements.stopSchedulerBtn) elements.stopSchedulerBtn.addEventListener('click', stopScheduler);
+    if (elements.schedulerGroupTarget) elements.schedulerGroupTarget.addEventListener('change', () => {
+        const specific = elements.schedulerGroupTarget.value === 'specific';
+        if (elements.schedulerGroupSelectorContainer) {
+            elements.schedulerGroupSelectorContainer.style.display = specific ? 'block' : 'none';
+        }
+        if (specific) populateSchedulerGroupSelector();
+    });
+    if (elements.schedulerSelectAllGroupsBtn) elements.schedulerSelectAllGroupsBtn.addEventListener('click', () => {
+        document.querySelectorAll('.scheduler-group-checkbox').forEach(cb => { cb.checked = true; });
+    });
+    if (elements.schedulerClearGroupsBtn) elements.schedulerClearGroupsBtn.addEventListener('click', () => {
+        document.querySelectorAll('.scheduler-group-checkbox').forEach(cb => { cb.checked = false; });
+    });
 
     // Ads - Automation Rules
     if (elements.newAdRuleBtn) elements.newAdRuleBtn.addEventListener('click', () => {
