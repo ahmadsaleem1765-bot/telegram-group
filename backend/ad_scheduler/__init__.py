@@ -9,6 +9,7 @@ even if the process restarts.
 import json
 import os
 import logging
+import random
 from typing import Optional, List, Dict, Any, Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
@@ -177,6 +178,8 @@ class AdScheduler:
         schedule_minute: int = 0,
         timezone_str: str = "UTC",
         event_loop=None,
+        inter_delivery_delay_min: float = 8.0,
+        inter_delivery_delay_max: float = 20.0,
     ) -> None:
         self._content_manager = content_manager
         self._delivery_engine = delivery_engine
@@ -184,6 +187,8 @@ class AdScheduler:
         self._schedule_hour = schedule_hour
         self._schedule_minute = schedule_minute
         self._timezone_str = timezone_str
+        self._inter_delivery_delay_min = inter_delivery_delay_min
+        self._inter_delivery_delay_max = inter_delivery_delay_max
         self._destinations: List[Destination] = []
         self._scheduler: Optional[AsyncIOScheduler] = None
         self._is_running = False
@@ -347,7 +352,22 @@ class AdScheduler:
         media_type = ad.media_type if media_path else None
 
         results: List[DeliveryResult] = []
-        for dest in targets:
+        for idx, dest in enumerate(targets):
+            if self._stop_delivery_requested:
+                self._log("Delivery stopped by user request")
+                break
+
+            # Random delay between deliveries (not before the first one)
+            if idx > 0:
+                delay = random.uniform(
+                    self._inter_delivery_delay_min,
+                    self._inter_delivery_delay_max,
+                )
+                self._log(
+                    f"Waiting {delay:.1f}s before next delivery..."
+                )
+                await asyncio.sleep(delay)
+
             if self._stop_delivery_requested:
                 self._log("Delivery stopped by user request")
                 break

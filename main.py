@@ -800,10 +800,17 @@ def send_messages():
             return jsonify({'error': 'Sending already in progress'}), 400
         app_state.is_sending = True
 
+    delay_min = int(data.get('delay_min', 8))
+    delay_max = int(data.get('delay_max', 20))
+    if delay_min < 3:
+        delay_min = 3
+    if delay_max < delay_min:
+        delay_max = delay_min + 5
+
     config_obj = AutomationConfig(
         message_template=message_template,
-        delay_min=3,
-        delay_max=8,
+        delay_min=delay_min,
+        delay_max=delay_max,
         max_messages=1000,
         dry_run=False
     )

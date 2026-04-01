@@ -420,27 +420,6 @@
 
                         <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 12px;" id="schedulerLastRun">Last run: Never</div>
 
-                        <!-- Group Target -->
-                        <div class="form-group" style="margin-bottom: 12px;">
-                            <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 6px;">To</label>
-                            <select id="schedulerGroupTarget" class="input" style="width: 100%; padding: 12px; background: #1f1f22; border: 1px solid #333; border-radius: 8px; color: #fff;">
-                                <option value="all">All Groups</option>
-                                <option value="specific">Specific Groups</option>
-                            </select>
-                        </div>
-
-                        <!-- Specific Groups Multi-Select -->
-                        <div id="schedulerGroupSelectorContainer" style="display: none; margin-bottom: 16px;">
-                            <label style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 8px;">SELECT GROUPS:</label>
-                            <div id="schedulerGroupSelector" style="background: #1f1f22; border: 1px solid #333; border-radius: 8px; max-height: 200px; overflow-y: auto; padding: 8px;">
-                                <div style="color: #475569; font-size: 0.85rem; padding: 8px;">No groups scanned yet</div>
-                            </div>
-                            <div style="margin-top: 6px; display: flex; gap: 8px;">
-                                <button id="schedulerSelectAllGroupsBtn" style="font-size: 0.75rem; background: transparent; border: 1px solid #444; color: #94a3b8; border-radius: 4px; padding: 3px 8px; cursor: pointer;">Select All</button>
-                                <button id="schedulerClearGroupsBtn" style="font-size: 0.75rem; background: transparent; border: 1px solid #444; color: #94a3b8; border-radius: 4px; padding: 3px 8px; cursor: pointer;">Clear</button>
-                            </div>
-                        </div>
-
                         <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px;">
                             <button class="btn btn-primary btn-large" id="startSchedulerBtn" style="flex: 1; background: #007bff; border-radius: 8px;">Start Automation</button>
                             <button class="btn btn-secondary" id="stopSchedulerBtn" style="flex: 1;" disabled>Stop Automation</button>
