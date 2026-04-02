@@ -1,6 +1,6 @@
 # Telegram Group Messaging Automation
 
-A production-quality Telegram automation application that identifies inactive Telegram groups based on user-defined date and time thresholds, and sends automated messages to those groups.
+Production-quality Telegram automation application that identifies inactive Telegram groups based on user-defined date and time thresholds, and sends automated messages to those groups.
 
 ## Features
 
@@ -126,19 +126,19 @@ Required environment variables for Railway:
 
 Optional environment variables:
 
-| Variable               | Default                    | Description                              |
-| ---------------------- | -------------------------- | ---------------------------------------- |
-| DEBUG                  | false                      | Enable debug mode                        |
-| PORT                   | 5000                       | Server port                              |
-| DEFAULT_DELAY_MIN      | 10                         | Minimum delay between messages (seconds) |
-| DEFAULT_DELAY_MAX      | 30                         | Maximum delay between messages (seconds) |
-| MAX_MESSAGES_PER_RUN   | 50                         | Maximum messages to send per run         |
-| CONTENT_DIR            | content                    | Directory for ad content and manifest    |
-| SCHEDULE_TIME          | 09:00                      | Daily ad delivery time (HH:MM, 24-hour)  |
-| SCHEDULE_TIMEZONE      | UTC                        | Timezone for scheduled delivery          |
-| DELIVERY_LEDGER_PATH   | data/delivery_ledger.json  | Path to idempotency ledger               |
-| DELIVERY_MAX_RETRIES   | 3                          | Max retry attempts for failed deliveries |
-| DELIVERY_INTER_DELAY   | 5.0                        | Seconds between sends to destinations    |
+| Variable             | Default                   | Description                              |
+| -------------------- | ------------------------- | ---------------------------------------- |
+| DEBUG                | false                     | Enable debug mode                        |
+| PORT                 | 5000                      | Server port                              |
+| DEFAULT_DELAY_MIN    | 10                        | Minimum delay between messages (seconds) |
+| DEFAULT_DELAY_MAX    | 30                        | Maximum delay between messages (seconds) |
+| MAX_MESSAGES_PER_RUN | 50                        | Maximum messages to send per run         |
+| CONTENT_DIR          | content                   | Directory for ad content and manifest    |
+| SCHEDULE_TIME        | 09:00                     | Daily ad delivery time (HH:MM, 24-hour)  |
+| SCHEDULE_TIMEZONE    | UTC                       | Timezone for scheduled delivery          |
+| DELIVERY_LEDGER_PATH | data/delivery_ledger.json | Path to idempotency ledger               |
+| DELIVERY_MAX_RETRIES | 3                         | Max retry attempts for failed deliveries |
+| DELIVERY_INTER_DELAY | 5.0                       | Seconds between sends to destinations    |
 
 ## Usage Guide
 
@@ -168,27 +168,27 @@ Optional environment variables:
 
 ## API Endpoints
 
-| Endpoint                        | Method | Description                        |
-| ------------------------------- | ------ | ---------------------------------- |
-| `/api/auth/status`              | GET    | Check authentication status        |
-| `/api/auth/login`               | POST   | Login with session string          |
-| `/api/auth/logout`              | POST   | Logout                             |
-| `/api/groups/scan`              | POST   | Scan all groups                    |
-| `/api/groups`                   | GET    | Get all groups                     |
-| `/api/automation/send`          | POST   | Send messages (broadcast)          |
-| `/api/automation/stop`          | POST   | Stop automation                    |
-| `/api/ads`                      | GET    | List all ad content                |
-| `/api/ads`                      | POST   | Create a new ad                    |
-| `/api/ads/today`                | GET    | Get today's selected ad            |
-| `/api/ads/<id>`                 | PUT    | Update an ad                       |
-| `/api/ads/<id>`                 | DELETE | Delete an ad                       |
-| `/api/ad-scheduler/status`      | GET    | Get ad scheduler status            |
-| `/api/ad-scheduler/start`       | POST   | Start daily ad scheduler           |
-| `/api/ad-scheduler/stop`        | POST   | Stop ad scheduler                  |
-| `/api/ad-scheduler/trigger`     | POST   | Trigger manual ad delivery         |
-| `/api/ad-scheduler/ledger`      | GET    | View delivery records by date      |
-| `/api/dashboard`                | GET    | Get dashboard data                 |
-| `/api/logs`                     | GET    | Get activity logs                  |
+| Endpoint                    | Method | Description                   |
+| --------------------------- | ------ | ----------------------------- |
+| `/api/auth/status`          | GET    | Check authentication status   |
+| `/api/auth/login`           | POST   | Login with session string     |
+| `/api/auth/logout`          | POST   | Logout                        |
+| `/api/groups/scan`          | POST   | Scan all groups               |
+| `/api/groups`               | GET    | Get all groups                |
+| `/api/automation/send`      | POST   | Send messages (broadcast)     |
+| `/api/automation/stop`      | POST   | Stop automation               |
+| `/api/ads`                  | GET    | List all ad content           |
+| `/api/ads`                  | POST   | Create a new ad               |
+| `/api/ads/today`            | GET    | Get today's selected ad       |
+| `/api/ads/<id>`             | PUT    | Update an ad                  |
+| `/api/ads/<id>`             | DELETE | Delete an ad                  |
+| `/api/ad-scheduler/status`  | GET    | Get ad scheduler status       |
+| `/api/ad-scheduler/start`   | POST   | Start daily ad scheduler      |
+| `/api/ad-scheduler/stop`    | POST   | Stop ad scheduler             |
+| `/api/ad-scheduler/trigger` | POST   | Trigger manual ad delivery    |
+| `/api/ad-scheduler/ledger`  | GET    | View delivery records by date |
+| `/api/dashboard`            | GET    | Get dashboard data            |
+| `/api/logs`                 | GET    | Get activity logs             |
 
 ### 5. Automated Daily Ad Delivery
 
