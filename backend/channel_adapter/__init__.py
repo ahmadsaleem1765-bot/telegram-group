@@ -24,6 +24,7 @@ class DeliveryStatus(Enum):
     FAILED = "failed"
     RETRYING = "retrying"
     SKIPPED = "skipped"
+    FLOOD_WAITED = "flood_waited"  # Telegram rate-limit; retry scheduled automatically
 
 
 @dataclass
@@ -40,6 +41,7 @@ class DeliveryResult:
     )
     attempts: int = 1
     error: Optional[str] = None
+    flood_wait_seconds: Optional[int] = None  # Set when status is FLOOD_WAITED
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -51,6 +53,7 @@ class DeliveryResult:
             "timestamp": self.timestamp.isoformat(),
             "attempts": self.attempts,
             "error": self.error,
+            "flood_wait_seconds": self.flood_wait_seconds,
         }
 
 
@@ -267,6 +270,30 @@ class DeliveryEngine:
 
             except Exception as e:
                 last_error = str(e)
+                # Telethon FloodWaitError carries the exact required wait in seconds.
+                # Return FLOOD_WAITED immediately so the caller can schedule a precise
+                # retry instead of wasting attempts against a hard Telegram block.
+                try:
+                    from telethon.errors import FloodWaitError
+                    if isinstance(e, FloodWaitError):
+                        logger.warning(
+                            "Delivery to %s hit Telegram flood limit: must wait %ds.",
+                            destination.name,
+                            e.seconds,
+                        )
+                        return DeliveryResult(
+                            destination_id=destination.id,
+                            destination_name=destination.name,
+                            destination_type=destination.type,
+                            status=DeliveryStatus.FLOOD_WAITED,
+                            content_id=content_id,
+                            attempts=attempt + 1,
+                            error=last_error,
+                            flood_wait_seconds=e.seconds,
+                        )
+                except ImportError:
+                    pass
+
                 if attempt < self._max_retries:
                     backoff = self._calculate_backoff(attempt)
                     logger.warning(

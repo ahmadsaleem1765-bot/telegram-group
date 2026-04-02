@@ -99,16 +99,9 @@ const elements = {
 
     // Ads - Scheduler
     schedulerStatusBadge: document.getElementById('schedulerStatusBadge'),
-    schedulerTime: document.getElementById('schedulerTime'),
-    schedulerTimezone: document.getElementById('schedulerTimezone'),
     schedulerLastRun: document.getElementById('schedulerLastRun'),
     startSchedulerBtn: document.getElementById('startSchedulerBtn'),
     stopSchedulerBtn: document.getElementById('stopSchedulerBtn'),
-    schedulerGroupTarget: document.getElementById('schedulerGroupTarget'),
-    schedulerGroupSelectorContainer: document.getElementById('schedulerGroupSelectorContainer'),
-    schedulerGroupSelector: document.getElementById('schedulerGroupSelector'),
-    schedulerSelectAllGroupsBtn: document.getElementById('schedulerSelectAllGroupsBtn'),
-    schedulerClearGroupsBtn: document.getElementById('schedulerClearGroupsBtn'),
 
     // Ads - Automation Rules
     newAdRuleBtn: document.getElementById('newAdRuleBtn'),
@@ -118,6 +111,8 @@ const elements = {
     ruleGroupSelector: document.getElementById('ruleGroupSelector'),
     ruleSelectAllGroupsBtn: document.getElementById('ruleSelectAllGroupsBtn'),
     ruleClearGroupsBtn: document.getElementById('ruleClearGroupsBtn'),
+    ruleTime: document.getElementById('ruleTime'),
+    ruleTimezone: document.getElementById('ruleTimezone'),
     saveAdRuleBtn: document.getElementById('saveAdRuleBtn'),
     adRulesList: document.getElementById('adRulesList'),
 
@@ -1051,9 +1046,6 @@ async function loadSchedulerStatus() {
         elements.schedulerStatusBadge.classList.toggle('scheduler-running', running);
         elements.schedulerStatusBadge.classList.toggle('scheduler-stopped', !running);
 
-        if (data.schedule_time) elements.schedulerTime.value = data.schedule_time;
-        if (data.timezone) elements.schedulerTimezone.value = data.timezone;
-
         elements.schedulerLastRun.textContent = data.last_run
             ? 'Last run: ' + new Date(data.last_run).toLocaleString()
             : 'Last run: Never';
@@ -1082,26 +1074,12 @@ function populateSchedulerGroupSelector() {
 }
 
 async function startScheduler() {
-    const target = elements.schedulerGroupTarget ? elements.schedulerGroupTarget.value : 'all';
-    let groupIds = null;
-    if (target === 'specific') {
-        groupIds = Array.from(document.querySelectorAll('.scheduler-group-checkbox:checked')).map(cb => cb.value);
-        if (groupIds.length === 0) {
-            showToast('Please select at least one group', 'error');
-            return;
-        }
-    }
     try {
         elements.startSchedulerBtn.disabled = true;
-        const body = {
-            schedule_time: elements.schedulerTime.value,
-            timezone: elements.schedulerTimezone.value || 'UTC'
-        };
-        if (groupIds) body.group_ids = groupIds;
         const response = await fetch('/api/ad-scheduler/start', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
+            body: JSON.stringify({})
         });
         const data = await response.json();
         if (response.ok) {
@@ -1162,10 +1140,13 @@ function renderAdRules(rules) {
                 <div style="font-size: 1rem; font-weight: 600; color: #fff; margin-bottom: 5px;">
                     ${escapeHtml(rule.ad_title)}
                 </div>
-                <div style="color: #94a3b8; font-size: 0.875rem;">
+                <div style="color: #94a3b8; font-size: 0.875rem; margin-bottom: 4px;">
                     → ${rule.group_names.length === 0
                         ? '<span style="color:#475569;">No groups</span>'
                         : rule.group_names.map(n => escapeHtml(n)).join(', ')}
+                </div>
+                <div style="color: #60a5fa; font-size: 0.8rem;">
+                    Daily at ${escapeHtml(rule.schedule_time || '09:00')} (${escapeHtml(rule.timezone || 'UTC')})
                 </div>
             </div>
             <button onclick="deleteAdRule('${rule.id}')" style="background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); border-radius: 4px; padding: 6px 12px; cursor: pointer; flex-shrink: 0;">Delete</button>
@@ -1201,6 +1182,8 @@ function populateRuleGroupSelector() {
 async function saveAdRule() {
     const adId = elements.ruleAdSelect ? elements.ruleAdSelect.value : '';
     const groupIds = Array.from(document.querySelectorAll('.rule-group-checkbox:checked')).map(cb => cb.value);
+    const scheduleTime = elements.ruleTime ? elements.ruleTime.value : '09:00';
+    const timezone = elements.ruleTimezone ? elements.ruleTimezone.value.trim() || 'UTC' : 'UTC';
     if (!adId) {
         showToast('Please select an ad', 'error');
         return;
@@ -1214,13 +1197,15 @@ async function saveAdRule() {
         const res = await fetch('/api/ad-rules', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ad_id: adId, group_ids: groupIds })
+            body: JSON.stringify({ ad_id: adId, group_ids: groupIds, schedule_time: scheduleTime, timezone: timezone })
         });
         const data = await res.json();
         if (res.ok) {
             showToast('Rule saved', 'success');
             elements.ruleAdSelect.value = '';
             document.querySelectorAll('.rule-group-checkbox').forEach(cb => { cb.checked = false; });
+            if (elements.ruleTime) elements.ruleTime.value = '09:00';
+            if (elements.ruleTimezone) elements.ruleTimezone.value = 'UTC';
             elements.adRuleForm.style.display = 'none';
             loadAdRules();
         } else {
@@ -1539,19 +1524,6 @@ function initEventListeners() {
     // Ads - Scheduler
     if (elements.startSchedulerBtn) elements.startSchedulerBtn.addEventListener('click', startScheduler);
     if (elements.stopSchedulerBtn) elements.stopSchedulerBtn.addEventListener('click', stopScheduler);
-    if (elements.schedulerGroupTarget) elements.schedulerGroupTarget.addEventListener('change', () => {
-        const specific = elements.schedulerGroupTarget.value === 'specific';
-        if (elements.schedulerGroupSelectorContainer) {
-            elements.schedulerGroupSelectorContainer.style.display = specific ? 'block' : 'none';
-        }
-        if (specific) populateSchedulerGroupSelector();
-    });
-    if (elements.schedulerSelectAllGroupsBtn) elements.schedulerSelectAllGroupsBtn.addEventListener('click', () => {
-        document.querySelectorAll('.scheduler-group-checkbox').forEach(cb => { cb.checked = true; });
-    });
-    if (elements.schedulerClearGroupsBtn) elements.schedulerClearGroupsBtn.addEventListener('click', () => {
-        document.querySelectorAll('.scheduler-group-checkbox').forEach(cb => { cb.checked = false; });
-    });
 
     // Ads - Automation Rules
     if (elements.newAdRuleBtn) elements.newAdRuleBtn.addEventListener('click', () => {

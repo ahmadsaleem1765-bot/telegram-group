@@ -192,6 +192,8 @@ class AdRule:
     id: str
     ad_id: str
     group_ids: List[str]
+    schedule_time: str = "09:00"
+    timezone: str = "UTC"
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def to_dict(self) -> Dict[str, Any]:
@@ -199,6 +201,8 @@ class AdRule:
             'id': self.id,
             'ad_id': self.ad_id,
             'group_ids': self.group_ids,
+            'schedule_time': self.schedule_time,
+            'timezone': self.timezone,
             'created_at': self.created_at,
         }
 
@@ -208,14 +212,14 @@ class AdRule:
             id=d['id'],
             ad_id=d['ad_id'],
             group_ids=d.get('group_ids', []),
+            schedule_time=d.get('schedule_time', '09:00'),
+            timezone=d.get('timezone', 'UTC'),
             created_at=d.get('created_at', ''),
         )
 
 
 AD_RULES_PATH = 'data/ad_rules.json'
 ad_rules: List[AdRule] = []
-# Optional group filter set when the scheduler is started with specific groups
-_scheduler_group_ids: Optional[List[str]] = None
 
 
 def _load_ad_rules() -> None:
@@ -1052,6 +1056,8 @@ def get_ad_rules():
             'ad_title': ad.title if ad else '[unknown ad]',
             'group_ids': r.group_ids,
             'group_names': [groups_map.get(gid, gid) for gid in r.group_ids],
+            'schedule_time': r.schedule_time,
+            'timezone': r.timezone,
             'created_at': r.created_at,
         })
     return jsonify({'rules': result})
@@ -1065,18 +1071,27 @@ def add_ad_rule():
     data = request.get_json() or {}
     ad_id = (data.get('ad_id') or '').strip()
     group_ids = data.get('group_ids', [])
+    schedule_time = (data.get('schedule_time') or '09:00').strip()
+    timezone_str = (data.get('timezone') or 'UTC').strip()
     if not ad_id:
         return jsonify({'error': 'ad_id is required'}), 400
     if not group_ids:
         return jsonify({'error': 'At least one group must be selected'}), 400
+    try:
+        _h, _m = schedule_time.split(':')
+        int(_h); int(_m)
+    except (ValueError, AttributeError):
+        return jsonify({'error': 'Invalid schedule_time format. Use HH:MM'}), 400
     rule = AdRule(
         id=f"rule_{int(datetime.now(timezone.utc).timestamp() * 1000)}",
         ad_id=ad_id,
         group_ids=[str(gid) for gid in group_ids],
+        schedule_time=schedule_time,
+        timezone=timezone_str,
     )
     ad_rules.append(rule)
     _save_ad_rules()
-    app_state.add_log(f"Ad rule added: ad={ad_id}, {len(group_ids)} group(s)")
+    app_state.add_log(f"Ad rule added: ad={ad_id}, {len(group_ids)} group(s), at {schedule_time} ({timezone_str})")
     return jsonify({'success': True, 'rule': rule.to_dict()})
 
 
@@ -1096,42 +1111,40 @@ def delete_ad_rule(rule_id):
 # ==================== Ad Scheduler API ====================
 
 
-async def _run_all_ad_rules_async() -> None:
-    """Coroutine executed by the daily scheduler job.
-
-    Iterates all ad rules and delivers each ad to its configured groups.
-    Respects _scheduler_group_ids filter if set.
-    """
-    if not ad_rules:
-        app_state.add_log('Ad automation: no rules configured, skipping')
+async def _run_single_rule_async(rule: AdRule) -> None:
+    """Execute a single ad automation rule."""
+    matching_groups = [g for g in app_state.groups if str(g.id) in rule.group_ids]
+    if not matching_groups:
+        app_state.add_log(f'Ad rule {rule.id}: no matching groups, skipping')
         return
-    # Warm up entity cache independently so ad delivery doesn't rely on
-    # the broadcast automation having run first.
+    destinations = [
+        Destination(id=str(g.id), name=g.name, type='telegram')
+        for g in matching_groups
+    ]
+    # Warm up entity cache before delivery
     await client_manager.client.get_dialogs(limit=None)
-    app_state.add_log(f'Ad automation: running {len(ad_rules)} rule(s)')
-    for rule in ad_rules:
-        # If a group filter is active, intersect with the rule's group list
-        if _scheduler_group_ids is not None:
-            effective_ids = [gid for gid in rule.group_ids if gid in _scheduler_group_ids]
-        else:
-            effective_ids = rule.group_ids
-        matching_groups = [g for g in app_state.groups if str(g.id) in effective_ids]
-        if not matching_groups:
-            app_state.add_log(f'Ad rule {rule.id}: no matching groups, skipping')
-            continue
-        destinations = [
-            Destination(id=str(g.id), name=g.name, type='telegram')
-            for g in matching_groups
-        ]
-        try:
-            results = await ad_scheduler.run_daily_delivery(
-                ad_id_override=rule.ad_id,
-                destinations_override=destinations,
-            )
-            success = sum(1 for r in results if r.status == DeliveryStatus.SUCCESS)
-            app_state.add_log(f'Ad rule {rule.id}: {success}/{len(destinations)} sent')
-        except Exception as e:
-            app_state.add_log(f'Ad rule {rule.id} error: {e}', 'error')
+    try:
+        results = await ad_scheduler.run_daily_delivery(
+            ad_id_override=rule.ad_id,
+            destinations_override=destinations,
+        )
+        success = sum(1 for r in results if r.status == DeliveryStatus.SUCCESS)
+        app_state.add_log(f'Ad rule {rule.id}: {success}/{len(destinations)} sent')
+
+        for result in results:
+            if result.status == DeliveryStatus.FLOOD_WAITED and result.flood_wait_seconds:
+                dest = next(
+                    (d for d in destinations if d.id == result.destination_id),
+                    None,
+                )
+                if dest and ad_scheduler.schedule_retry(dest, rule.ad_id, result.flood_wait_seconds):
+                    retry_mins = (result.flood_wait_seconds + 10) // 60
+                    app_state.add_log(
+                        f'Ad rule {rule.id}: flood-wait retry for '
+                        f'{dest.name} scheduled in ~{retry_mins}m'
+                    )
+    except Exception as e:
+        app_state.add_log(f'Ad rule {rule.id} error: {e}', 'error')
 
 
 @app.route('/api/ad-scheduler/status', methods=['GET'])
@@ -1142,44 +1155,48 @@ def ad_scheduler_status():
 
 @app.route('/api/ad-scheduler/start', methods=['POST'])
 def start_ad_scheduler():
-    """Start the ad automation scheduler."""
-    global _scheduler_group_ids
+    """Start the ad automation scheduler using each rule's own schedule."""
     if not client_manager.is_authenticated:
         return jsonify({'error': 'Not authenticated'}), 401
     if not ad_rules:
         return jsonify({'error': 'No automation rules configured. Add at least one rule first.'}), 400
 
-    data = request.get_json() or {}
-    schedule_time = data.get('schedule_time', config.schedule_time)
-    tz = data.get('timezone', config.schedule_timezone)
-    group_ids = data.get('group_ids')  # Optional list of specific group IDs to target
-    try:
-        hour, minute = int(schedule_time.split(':')[0]), int(schedule_time.split(':')[1])
-    except (ValueError, IndexError):
-        return jsonify({'error': 'Invalid schedule_time format. Use HH:MM'}), 400
+    rule_schedules = []
+    for rule in ad_rules:
+        try:
+            hour = int(rule.schedule_time.split(':')[0])
+            minute = int(rule.schedule_time.split(':')[1])
+        except (ValueError, IndexError):
+            return jsonify({'error': f'Rule {rule.id} has invalid schedule_time: {rule.schedule_time}'}), 400
 
-    # Store group filter (None means all groups)
-    _scheduler_group_ids = [str(gid) for gid in group_ids] if group_ids else None
+        def _make_callback(r=rule):
+            async def _job():
+                await _run_single_rule_async(r)
+            return _job
+
+        rule_schedules.append({
+            'id': rule.id,
+            'hour': hour,
+            'minute': minute,
+            'timezone': rule.timezone,
+            'callback': _make_callback(),
+        })
 
     try:
-        ad_scheduler.update_schedule(hour, minute, tz)
-        ad_scheduler.start(job_callback=_run_all_ad_rules_async)
+        ad_scheduler.start_rule_jobs(rule_schedules)
     except Exception as e:
         logger.error(f"Failed to start ad scheduler: {e}", exc_info=True)
         app_state.add_log(f"Ad scheduler start failed: {e}", "error")
         return jsonify({'error': f'Failed to start scheduler: {str(e)}'}), 500
 
-    group_info = f", {len(_scheduler_group_ids)} group(s) selected" if _scheduler_group_ids else ", all groups"
-    app_state.add_log(f"Ad automation started: {hour:02d}:{minute:02d} ({tz}), {len(ad_rules)} rule(s){group_info}")
+    app_state.add_log(f"Ad automation started: {len(ad_rules)} rule(s) with individual schedules")
     return jsonify({'success': True, 'status': ad_scheduler.get_status()})
 
 
 @app.route('/api/ad-scheduler/stop', methods=['POST'])
 def stop_ad_scheduler():
     """Stop the ad scheduler"""
-    global _scheduler_group_ids
     ad_scheduler.stop()
-    _scheduler_group_ids = None
     app_state.add_log("Ad scheduler stopped")
     return jsonify({'success': True})
 

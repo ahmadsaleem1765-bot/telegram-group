@@ -12,6 +12,9 @@ Telethon==1.42.0
 aiohttp==3.9.1
 asyncio-redis==0.16.0
 
+# Database (PostgreSQL for Railway / cloud deployments)
+psycopg2-binary==2.9.9
+
 # Configuration
 python-dotenv==1.0.0
 

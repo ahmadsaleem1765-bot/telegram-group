@@ -14,7 +14,11 @@ from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 
+from backend.db import db_set, db_get
+
 logger = logging.getLogger(__name__)
+
+_DB_KEY = 'content_manifest'
 
 
 @dataclass
@@ -114,34 +118,62 @@ class ContentManager:
             )
 
     def _write_manifest(self, ads_data: List[Dict[str, Any]]) -> None:
-        """Atomically write manifest to disk."""
-        tmp = self.manifest_path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump({"ads": ads_data}, f, indent=2)
-        if os.path.exists(self.manifest_path):
-            os.remove(self.manifest_path)
-        os.rename(tmp, self.manifest_path)
+        """Persist manifest to DB (primary) and file (fallback/backup)."""
+        payload = {"ads": ads_data}
+
+        # Always try DB first
+        db_saved = db_set(_DB_KEY, payload)
+
+        # Write file as local backup (useful for dev and migration)
+        try:
+            tmp = self.manifest_path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(payload, f, indent=2)
+            if os.path.exists(self.manifest_path):
+                os.remove(self.manifest_path)
+            os.rename(tmp, self.manifest_path)
+            self._manifest_mtime = os.path.getmtime(self.manifest_path)
+        except Exception as e:
+            if not db_saved:
+                logger.error("Failed to write manifest to DB or file: %s", e)
+            else:
+                logger.debug("Manifest saved to DB; local file write failed: %s", e)
 
     def reload(self) -> None:
-        """Reload the manifest from disk (hot-swap support)."""
+        """Load the manifest from DB (primary) or file (fallback)."""
+        # Try database first
+        data = db_get(_DB_KEY)
+        if data is not None:
+            ads_data = data.get("ads", [])
+            self._ads = [AdContent.from_dict(a) for a in ads_data]
+            logger.info("Loaded %d ads from database", len(self._ads))
+            return
+
+        # File fallback
         try:
             with open(self.manifest_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             ads_data = data.get("ads", [])
             self._ads = [AdContent.from_dict(a) for a in ads_data]
             self._manifest_mtime = os.path.getmtime(self.manifest_path)
-            logger.info(
-                "Loaded %d ads from manifest", len(self._ads)
-            )
+            logger.info("Loaded %d ads from manifest file", len(self._ads))
         except Exception as e:
             logger.error("Failed to load manifest: %s", e)
             self._ads = []
 
     def check_for_updates(self) -> bool:
-        """Check if manifest has been modified on disk and reload if so.
+        """Check if the manifest has changed and reload if so.
 
+        When using the database, in-memory state is always kept in sync by
+        add_ad / update_ad / delete_ad, so no polling is needed.
+        For local file-only mode, compare mtime as before.
         Returns True if a reload happened.
         """
+        # If DB is available, trust in-memory state (writes go through _save)
+        if db_get(_DB_KEY) is not None:
+            return False
+
+        # File-only hot-swap check
         try:
             current_mtime = os.path.getmtime(self.manifest_path)
             if current_mtime > self._manifest_mtime:

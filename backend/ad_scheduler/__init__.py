@@ -12,7 +12,7 @@ import logging
 import random
 from typing import Optional, List, Dict, Any, Callable
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 import asyncio
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -293,6 +293,48 @@ class AdScheduler:
             f"({self._timezone_str})"
         )
 
+    def start_rule_jobs(self, rule_schedules: List[Dict[str, Any]]) -> None:
+        """Start individual cron jobs for each rule's own schedule.
+
+        Args:
+            rule_schedules: list of dicts with keys:
+                id (str), hour (int), minute (int), timezone (str), callback (coroutine callable)
+        """
+        if self._is_running:
+            logger.warning("Ad scheduler already running")
+            return
+
+        if self._event_loop is not None and self._event_loop.is_running():
+            future = asyncio.run_coroutine_threadsafe(
+                self._start_rule_jobs_on_loop(rule_schedules), self._event_loop
+            )
+            future.result(timeout=10)
+        else:
+            self._do_start_rule_jobs(rule_schedules)
+
+    async def _start_rule_jobs_on_loop(self, rule_schedules: List[Dict[str, Any]]) -> None:
+        self._do_start_rule_jobs(rule_schedules)
+
+    def _do_start_rule_jobs(self, rule_schedules: List[Dict[str, Any]]) -> None:
+        self._scheduler = AsyncIOScheduler()
+        for sched in rule_schedules:
+            trigger = CronTrigger(
+                hour=sched['hour'],
+                minute=sched['minute'],
+                timezone=sched['timezone'],
+            )
+            self._scheduler.add_job(
+                sched['callback'],
+                trigger=trigger,
+                id=f"ad_rule_{sched['id']}",
+                replace_existing=True,
+            )
+        self._scheduler.start()
+        self._is_running = True
+        self._log(
+            f"Ad scheduler started with {len(rule_schedules)} rule job(s)"
+        )
+
     def stop(self) -> None:
         """Stop the scheduler."""
         if self._scheduler:
@@ -429,6 +471,72 @@ class AdScheduler:
         )
         self._is_delivering = False
         return results
+
+    def schedule_retry(
+        self,
+        destination: "Destination",
+        ad_id: str,
+        delay_seconds: int,
+        buffer_seconds: int = 10,
+    ) -> bool:
+        """Schedule a one-shot retry delivery after a flood-wait expires.
+
+        Args:
+            destination: The destination that returned FLOOD_WAITED.
+            ad_id: The ad content ID to retry.
+            delay_seconds: Flood-wait duration reported by Telegram.
+            buffer_seconds: Extra seconds added after the flood window as safety margin.
+
+        Returns:
+            True if the job was successfully scheduled, False otherwise.
+        """
+        if not self._scheduler:
+            logger.warning(
+                "Cannot schedule retry for %s: scheduler not running",
+                destination.name,
+            )
+            return False
+
+        from apscheduler.triggers.date import DateTrigger
+
+        run_at = datetime.now(timezone.utc) + timedelta(
+            seconds=delay_seconds + buffer_seconds
+        )
+        job_id = f"flood_retry_{ad_id}_{destination.id}"
+
+        async def _retry() -> None:
+            logger.info(
+                "Flood-wait retry: delivering ad %s to %s",
+                ad_id,
+                destination.name,
+            )
+            results = await self.run_daily_delivery(
+                ad_id_override=ad_id,
+                destinations_override=[destination],
+            )
+            if results:
+                status = results[0].status.value
+                logger.info(
+                    "Flood-wait retry result for %s: %s",
+                    destination.name,
+                    status,
+                )
+
+        self._scheduler.add_job(
+            _retry,
+            trigger=DateTrigger(run_date=run_at),
+            id=job_id,
+            replace_existing=True,
+        )
+        logger.info(
+            "Scheduled flood-wait retry for %s (ad=%s) at %s (+%ds wait +%ds buffer)",
+            destination.name,
+            ad_id,
+            run_at.strftime("%H:%M:%S UTC"),
+            delay_seconds,
+            buffer_seconds,
+        )
+        return True
 
     def get_status(self) -> Dict[str, Any]:
         """Get scheduler status for API responses."""
