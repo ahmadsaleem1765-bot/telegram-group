@@ -198,8 +198,9 @@ async function checkAuthStatus() {
         const data = await response.json();
         
         state.isAuthenticated = data.is_authenticated;
+        state.sessionRevoked = data.session_revoked || false;
         state.user = data.user;
-        
+
         updateAuthUI();
     } catch (error) {
         console.error('Failed to check auth status:', error);
@@ -207,20 +208,29 @@ async function checkAuthStatus() {
 }
 
 function updateAuthUI() {
-    if (state.isAuthenticated && state.user) {
+    const banner = document.getElementById('sessionRevokedBanner');
+    if (state.sessionRevoked) {
+        if (banner) banner.style.display = 'flex';
+        elements.userName.textContent = 'Session Revoked';
+        elements.userStatus.textContent = 'Re-auth required';
+        elements.connectBtn.textContent = 'Re-authenticate';
+        elements.connectBtn.disabled = false;
+        elements.scanGroupsBtn.disabled = true;
+        elements.configureFilterBtn.disabled = true;
+    } else if (state.isAuthenticated && state.user) {
+        if (banner) banner.style.display = 'none';
         elements.userName.textContent = state.user.name;
         elements.userStatus.textContent = state.user.username ? '@' + state.user.username : 'No Username';
         elements.connectBtn.textContent = 'Connected';
         elements.connectBtn.disabled = true;
-        
         elements.scanGroupsBtn.disabled = false;
         elements.configureFilterBtn.disabled = false;
     } else {
+        if (banner) banner.style.display = 'none';
         elements.userName.textContent = 'Not logged in';
         elements.userStatus.textContent = 'Offline';
         elements.connectBtn.textContent = 'Connect';
         elements.connectBtn.disabled = false;
-        
         elements.scanGroupsBtn.disabled = true;
         elements.configureFilterBtn.disabled = true;
     }
@@ -364,6 +374,7 @@ async function verifySmsCode() {
             } else {
                 // Success
                 state.isAuthenticated = true;
+                state.sessionRevoked = false;
                 state.user = data.user;
                 updateAuthUI();
                 closeLoginModal();
@@ -402,6 +413,7 @@ async function verifyTwoFaPassword() {
         
         if (response.ok) {
             state.isAuthenticated = true;
+            state.sessionRevoked = false;
             state.user = data.user;
             updateAuthUI();
             closeLoginModal();

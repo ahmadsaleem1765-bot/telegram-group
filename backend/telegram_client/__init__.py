@@ -4,6 +4,7 @@ Telegram Client Module
 Handles authentication and communication with Telegram API using Telethon.
 """
 
+import asyncio
 import logging
 from typing import Optional, List
 
@@ -16,6 +17,8 @@ from telethon.errors import (
     PhoneCodeInvalidError,
     ApiIdInvalidError,
     FloodWaitError,
+    SessionRevokedError,
+    AuthKeyError,
 )
 from telethon.tl.types import Chat, Channel, Dialog
 
@@ -48,10 +51,22 @@ class TelegramClientManager:
         self._client: Optional[TelegramClient] = None
         self._user: Optional[TelegramUser] = None
         self._is_authenticated = False
+        self._session_revoked = False
 
     @property
     def is_authenticated(self) -> bool:
         return self._is_authenticated
+
+    @property
+    def session_revoked(self) -> bool:
+        return self._session_revoked
+
+    def mark_session_revoked(self):
+        """Mark session as revoked — called when Telegram invalidates the session."""
+        self._is_authenticated = False
+        self._session_revoked = True
+        self._user = None
+        logger.critical("Session has been revoked by Telegram. Re-authentication required.")
 
     @property
     def client(self) -> Optional[TelegramClient]:
@@ -96,6 +111,8 @@ class TelegramClientManager:
                     phone=me.phone
                 )
                 self._is_authenticated = True
+                self._session_revoked = False
+                asyncio.ensure_future(self._watch_disconnection())
                 logger.info(f"Authenticated as {self._user.display_name}")
                 return True
 
@@ -107,6 +124,19 @@ class TelegramClientManager:
         except Exception as e:
             logger.error(f"Failed to authenticate: {e}")
             return False
+
+    async def _watch_disconnection(self):
+        """Monitor client connection and detect session revocation on disconnect."""
+        client = self._client
+        if client is None:
+            return
+        try:
+            await client.disconnected
+        except (SessionRevokedError, AuthKeyError):
+            self.mark_session_revoked()
+        except Exception as e:
+            if self._is_authenticated:
+                logger.warning(f"Telegram client disconnected unexpectedly: {e}")
 
     async def start_with_phone(self, phone: str) -> str:
         """

@@ -602,6 +602,12 @@
         </div>
     </div>
 
+    <!-- Session Revoked Banner -->
+    <div id="sessionRevokedBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#FF3B30;color:#fff;padding:12px 20px;display:none;align-items:center;justify-content:space-between;font-size:14px;font-weight:500;box-shadow:0 2px 8px rgba(0,0,0,0.3);">
+        <span>&#9888; Your Telegram session was revoked. Please re-authenticate to resume automation.</span>
+        <button onclick="openLoginModal()" style="background:#fff;color:#FF3B30;border:none;border-radius:6px;padding:6px 14px;font-weight:600;cursor:pointer;margin-left:16px;">Re-authenticate</button>
+    </div>
+
     <!-- Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
 

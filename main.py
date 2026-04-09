@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from flask import Flask, render_template, request, jsonify, Response
 from flask_cors import CORS
 from telethon import events
+from telethon.errors import SessionRevokedError, AuthKeyError
 
 # Setup directories
 os.makedirs('logs', exist_ok=True)
@@ -403,6 +404,13 @@ async def automation_worker():
                     # Next minute it can evaluate the remaining/others if necessary
                     break
 
+        except (SessionRevokedError, AuthKeyError):
+            logger.critical("Session revoked detected in automation worker. Halting automation.")
+            client_manager.mark_session_revoked()
+            app_state.add_log("Session revoked — please re-authenticate in the dashboard", "error")
+            with app_state_lock:
+                app_state.is_sending = False
+                app_state.is_scanning = False
         except asyncio.CancelledError:
             break
         except Exception as e:
@@ -487,6 +495,7 @@ def auth_status():
     """Check authentication status"""
     return jsonify({
         'is_authenticated': client_manager.is_authenticated,
+        'session_revoked': client_manager.session_revoked,
         'user': {
             'id': app_state.user.id if app_state.user else None,
             'name': app_state.user.display_name if app_state.user else None,

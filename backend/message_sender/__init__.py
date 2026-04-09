@@ -365,6 +365,9 @@ class MessageSender:
             )
 
         except Exception as e:
+            from telethon.errors import SessionRevokedError, AuthKeyError
+            if isinstance(e, (SessionRevokedError, AuthKeyError)):
+                raise  # propagate up so automation_worker can mark session revoked
             logger.error(f"Failed to send message to {group.name}: {e}")
             return MessageResult(
                 group_id=group.id,

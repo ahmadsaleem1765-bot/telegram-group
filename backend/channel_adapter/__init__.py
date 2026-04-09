@@ -274,7 +274,13 @@ class DeliveryEngine:
                 # Return FLOOD_WAITED immediately so the caller can schedule a precise
                 # retry instead of wasting attempts against a hard Telegram block.
                 try:
-                    from telethon.errors import FloodWaitError
+                    from telethon.errors import FloodWaitError, SessionRevokedError, AuthKeyError
+                    if isinstance(e, (SessionRevokedError, AuthKeyError)):
+                        logger.critical(
+                            "Session revoked during delivery to %s — re-raising.",
+                            destination.name,
+                        )
+                        raise
                     if isinstance(e, FloodWaitError):
                         logger.warning(
                             "Delivery to %s hit Telegram flood limit: must wait %ds.",
