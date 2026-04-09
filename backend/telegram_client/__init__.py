@@ -90,6 +90,16 @@ class TelegramClientManager:
             logger.error("API_ID and API_HASH must be configured")
             return False
 
+        # Disconnect existing client if any (e.g., after session revocation)
+        if self._client is not None:
+            try:
+                await self._client.disconnect()
+            except Exception:
+                pass
+            self._client = None
+            self._is_authenticated = False
+            self._session_revoked = False
+
         try:
             # Create client with session string
             self._client = TelegramClient(
