@@ -1279,6 +1279,21 @@ def get_delivery_ledger():
     })
 
 
+# ==================== DB Status API ====================
+
+@app.route('/api/db-status', methods=['GET'])
+def db_status():
+    """Check whether the PostgreSQL database is connected"""
+    from backend.db import get_connection, _db_available
+    connected = False
+    try:
+        conn = get_connection()
+        connected = conn is not None
+    except Exception:
+        connected = False
+    return jsonify({'connected': connected})
+
+
 # ==================== Dashboard API ====================
 
 @app.route('/api/dashboard', methods=['GET'])

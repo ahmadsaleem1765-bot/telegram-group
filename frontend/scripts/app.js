@@ -1603,5 +1603,31 @@ async function init() {
     showToast('Application loaded', 'info');
 }
 
+// ==================== DB Status ====================
+async function checkDbStatus() {
+    const bar = document.getElementById('dbStatusBar');
+    const text = document.getElementById('dbStatusText');
+    const dot = document.getElementById('dbStatusDot');
+    if (!bar) return;
+    try {
+        const res = await fetch('/api/db-status');
+        const data = await res.json();
+        if (data.connected) {
+            bar.className = 'db-status-bar db-connected';
+            text.textContent = 'DB: connected';
+        } else {
+            bar.className = 'db-status-bar db-disconnected';
+            text.textContent = 'DB: not connected';
+        }
+    } catch {
+        bar.className = 'db-status-bar db-disconnected';
+        text.textContent = 'DB: unreachable';
+    }
+}
+
 // Start app
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+    init();
+    checkDbStatus();
+    setInterval(checkDbStatus, 30000);
+});

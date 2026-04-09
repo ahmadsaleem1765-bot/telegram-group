@@ -271,6 +271,50 @@ html, body {
     border-top: 1px solid var(--border-glass);
 }
 
+.db-status-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    margin-bottom: 8px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border-glass);
+    font-size: 11px;
+    color: var(--text-secondary);
+    cursor: default;
+}
+
+.db-status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #888;
+    margin-left: auto;
+    flex-shrink: 0;
+    transition: background 0.3s;
+}
+
+.db-status-bar.db-connected {
+    color: #4ade80;
+    border-color: rgba(74,222,128,0.25);
+}
+
+.db-status-bar.db-connected .db-status-dot {
+    background: #4ade80;
+    box-shadow: 0 0 6px #4ade80;
+}
+
+.db-status-bar.db-disconnected {
+    color: #f87171;
+    border-color: rgba(248,113,113,0.25);
+}
+
+.db-status-bar.db-disconnected .db-status-dot {
+    background: #f87171;
+    box-shadow: 0 0 6px #f87171;
+}
+
 .user-info {
     display: flex;
     align-items: center;
