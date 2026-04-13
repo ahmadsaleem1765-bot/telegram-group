@@ -394,6 +394,8 @@ async def automation_worker():
                                 groups_snapshot = [g.to_dict() for g in app_state.groups]
                             persistence.save_groups(groups_snapshot)
 
+                    except (SessionRevokedError, AuthKeyError):
+                        raise  # let outer handler mark session revoked
                     except Exception as e:
                         app_state.add_log(f"Auto-rule error: {e}", "error")
                     finally:

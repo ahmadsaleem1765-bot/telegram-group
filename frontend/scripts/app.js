@@ -209,26 +209,44 @@ async function checkAuthStatus() {
 
 function updateAuthUI() {
     const banner = document.getElementById('sessionRevokedBanner');
+    const loginCard = document.getElementById('loginCard');
+    const loginCardTitle = document.getElementById('loginCardTitle');
+    const loginCardDesc = document.getElementById('loginCardDesc');
+    const reconnectBtn = document.getElementById('reconnectBtn');
+
     if (state.sessionRevoked) {
         if (banner) banner.style.display = 'flex';
+        if (loginCard) loginCard.style.borderColor = '#FF3B30';
+        if (loginCardTitle) loginCardTitle.textContent = 'Session Revoked';
+        if (loginCardDesc) loginCardDesc.textContent = 'Your session was invalidated. Reconnect to resume automation.';
+        if (reconnectBtn) reconnectBtn.style.display = '';
         elements.userName.textContent = 'Session Revoked';
         elements.userStatus.textContent = 'Re-auth required';
-        elements.connectBtn.textContent = 'Re-authenticate';
-        elements.connectBtn.disabled = false;
+        elements.connectBtn.style.display = 'none';
         elements.scanGroupsBtn.disabled = true;
         elements.configureFilterBtn.disabled = true;
     } else if (state.isAuthenticated && state.user) {
         if (banner) banner.style.display = 'none';
+        if (loginCard) loginCard.style.borderColor = '';
+        if (loginCardTitle) loginCardTitle.textContent = 'Connect Telegram';
+        if (loginCardDesc) loginCardDesc.textContent = 'Authenticate with your Telegram account to get started';
+        if (reconnectBtn) reconnectBtn.style.display = 'none';
         elements.userName.textContent = state.user.name;
         elements.userStatus.textContent = state.user.username ? '@' + state.user.username : 'No Username';
+        elements.connectBtn.style.display = '';
         elements.connectBtn.textContent = 'Connected';
         elements.connectBtn.disabled = true;
         elements.scanGroupsBtn.disabled = false;
         elements.configureFilterBtn.disabled = false;
     } else {
         if (banner) banner.style.display = 'none';
+        if (loginCard) loginCard.style.borderColor = '';
+        if (loginCardTitle) loginCardTitle.textContent = 'Connect Telegram';
+        if (loginCardDesc) loginCardDesc.textContent = 'Authenticate with your Telegram account to get started';
+        if (reconnectBtn) reconnectBtn.style.display = 'none';
         elements.userName.textContent = 'Not logged in';
         elements.userStatus.textContent = 'Offline';
+        elements.connectBtn.style.display = '';
         elements.connectBtn.textContent = 'Connect';
         elements.connectBtn.disabled = false;
         elements.scanGroupsBtn.disabled = true;

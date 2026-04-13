@@ -159,15 +159,16 @@
                     <h2 class="section-title">Quick Actions</h2>
                     <div class="action-cards">
                         <div class="action-card" id="loginCard">
-                            <div class="action-icon">
+                            <div class="action-icon" id="loginCardIcon">
                                 <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
                                     <circle cx="16" cy="12" r="5" stroke="currentColor" stroke-width="2"/>
                                     <path d="M6 28C6 23.5817 9.58172 20 14 20H18C22.4183 20 26 23.5817 26 28" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                                 </svg>
                             </div>
-                            <h3>Connect Telegram</h3>
-                            <p>Authenticate with your Telegram account to get started</p>
+                            <h3 id="loginCardTitle">Connect Telegram</h3>
+                            <p id="loginCardDesc">Authenticate with your Telegram account to get started</p>
                             <button class="btn btn-primary" id="connectBtn">Connect</button>
+                            <button class="btn btn-danger" id="reconnectBtn" style="display:none;" onclick="openLoginModal()">Reconnect Account</button>
                         </div>
                         <div class="action-card">
                             <div class="action-icon">
