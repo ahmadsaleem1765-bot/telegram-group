@@ -15,6 +15,9 @@ asyncio-redis==0.16.0
 # Database (PostgreSQL for Railway / cloud deployments)
 psycopg2-binary==2.9.9
 
+# Supabase client
+supabase>=2.0.0
+
 # Configuration
 python-dotenv==1.0.0
 

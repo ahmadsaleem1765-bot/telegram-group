@@ -1,9 +1,10 @@
 """
 Database Module
 
-Provides a PostgreSQL connection using the DATABASE_URL environment variable.
-Used for persistent storage on Railway (and other cloud platforms).
-Falls back gracefully to file-based persistence when DATABASE_URL is not set.
+Priority order:
+  1. Supabase (SUPABASE_URL + SUPABASE_KEY) — preferred
+  2. PostgreSQL via psycopg2 (DATABASE_URL) — fallback
+  3. File-based persistence — local dev fallback
 """
 
 import os
@@ -15,7 +16,66 @@ logger = logging.getLogger(__name__)
 _local = threading.local()
 _initialized = False
 _db_available = None  # None = unknown, True/False after first check
+_supabase_client = None
 
+
+# ──────────────────────────────────────────────
+# Supabase client
+# ──────────────────────────────────────────────
+
+def _get_supabase():
+    """Return a cached Supabase client, or None if not configured."""
+    global _supabase_client
+
+    if _supabase_client is not None:
+        return _supabase_client
+
+    url = os.environ.get('SUPABASE_URL')
+    key = os.environ.get('SUPABASE_KEY')
+    if not url or not key:
+        return None
+
+    try:
+        from supabase import create_client
+        _supabase_client = create_client(url, key)
+        logger.info("Supabase client initialised")
+        return _supabase_client
+    except ImportError:
+        logger.warning("supabase package not installed — pip install supabase")
+        return None
+    except Exception as e:
+        logger.error("Supabase init failed: %s", e)
+        return None
+
+
+def _supabase_ensure_table():
+    """
+    Supabase tables must be created via the dashboard or migrations.
+    This logs a warning if the kv_store table doesn't exist yet.
+    """
+    client = _get_supabase()
+    if client is None:
+        return False
+    try:
+        client.table('kv_store').select('key').limit(1).execute()
+        return True
+    except Exception as e:
+        logger.error(
+            "kv_store table not found in Supabase. "
+            "Create it with:\n"
+            "  CREATE TABLE kv_store (\n"
+            "    key TEXT PRIMARY KEY,\n"
+            "    value JSONB NOT NULL,\n"
+            "    updated_at TIMESTAMPTZ DEFAULT NOW()\n"
+            "  );\n"
+            "Error: %s", e
+        )
+        return False
+
+
+# ──────────────────────────────────────────────
+# psycopg2 / PostgreSQL fallback
+# ──────────────────────────────────────────────
 
 def get_connection():
     """Return a thread-local psycopg2 connection, or None if DB is unavailable."""
@@ -38,13 +98,11 @@ def get_connection():
 
     conn = getattr(_local, 'conn', None)
 
-    # Reconnect if connection is closed or broken
     if conn is None or conn.closed:
         conn = None
     else:
         try:
-            # Quick liveness check
-            conn.isolation_level  # noqa: accessing attribute pings the connection
+            conn.isolation_level  # liveness ping
         except Exception:
             conn = None
 
@@ -64,10 +122,17 @@ def get_connection():
 
 def init_db() -> bool:
     """
-    Create required tables if they do not exist.
+    Create required tables if they do not exist (psycopg2 path only).
     Returns True if the database is available, False otherwise.
     """
     global _initialized, _db_available
+
+    # Supabase path — table must exist already
+    if _get_supabase() is not None:
+        if not _initialized:
+            _db_available = _supabase_ensure_table()
+            _initialized = True
+        return _db_available is True
 
     if _initialized:
         return _db_available is True
@@ -78,7 +143,6 @@ def init_db() -> bool:
         return False
 
     try:
-        import psycopg2
         with conn.cursor() as cur:
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS kv_store (
@@ -98,11 +162,30 @@ def init_db() -> bool:
         return False
 
 
+# ──────────────────────────────────────────────
+# Public API
+# ──────────────────────────────────────────────
+
 def db_set(key: str, value) -> bool:
     """
     Upsert a JSON value by key.
     Returns True on success, False if DB is unavailable or an error occurs.
     """
+    # Try Supabase first
+    client = _get_supabase()
+    if client is not None:
+        if not init_db():
+            return False
+        try:
+            client.table('kv_store').upsert(
+                {'key': key, 'value': value, 'updated_at': 'now()'}
+            ).execute()
+            return True
+        except Exception as e:
+            logger.error("Supabase write error [%s]: %s", key, e)
+            return False
+
+    # psycopg2 fallback
     if not init_db():
         return False
     conn = get_connection()
@@ -130,9 +213,23 @@ def db_set(key: str, value) -> bool:
 def db_get(key: str):
     """
     Fetch a JSON value by key.
-    Returns the deserialized value, or None if the key does not exist
-    or the DB is unavailable.
+    Returns the deserialized value, or None if not found / DB unavailable.
     """
+    # Try Supabase first
+    client = _get_supabase()
+    if client is not None:
+        if not init_db():
+            return None
+        try:
+            res = client.table('kv_store').select('value').eq('key', key).execute()
+            if res.data:
+                return res.data[0]['value']
+            return None
+        except Exception as e:
+            logger.error("Supabase read error [%s]: %s", key, e)
+            return None
+
+    # psycopg2 fallback
     if not init_db():
         return None
     conn = get_connection()
